@@ -171,8 +171,17 @@ For Pronunciation Training:
     
     def update_model_options(self):
         self.model_combo.clear()
+        # Updated model options for Google Speech Recognition
         if self.engine_combo.currentText() == "Google Speech Recognition":
-            self.model_combo.addItems(["Default", "Command and Search", "Dictation"])
+            self.model_combo.addItems([
+                "Default",           # Legacy compatibility
+                "Command and Search", # Legacy compatibility  
+                "Dictation",         # Legacy compatibility
+                "latest_short",      # NEW: Short utterances (recommended over Command and Search)
+                "latest_long",       # NEW: Long content (recommended over Default)
+                "chirp_3",          # NEW: Latest multilingual model with advanced features
+                "telephony"         # NEW: Phone call optimization
+            ])
         else:  # Whisper
             self.model_combo.addItems(["tiny", "base", "small", "medium", "large"])
             self.model_combo.setCurrentText("base")
