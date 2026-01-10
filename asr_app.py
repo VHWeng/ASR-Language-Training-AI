@@ -215,9 +215,17 @@ class ASRThread(QThread):
             
             # Add pronunciation analysis if reference text provided
             if self.reference_text:
-                result['pronunciation'] = self.analyze_pronunciation(
+                pronunciation_result = self.analyze_pronunciation(
                     self.reference_text, result['text']
                 )
+                # Add pronunciation data to metadata
+                if 'metadata' not in result:
+                    result['metadata'] = {}
+                result['metadata']['pronunciation'] = pronunciation_result
+                
+                # Debug logging
+                print(f"DEBUG: Pronunciation analysis completed. Accuracy: {pronunciation_result['accuracy']:.1f}%")
+                print(f"DEBUG: Word analysis items: {len(pronunciation_result['word_analysis'])}")
             
             self.finished.emit(result['text'], result.get('metadata', {}))
         except Exception as e:
@@ -232,6 +240,7 @@ class ASRThread(QThread):
         
         text = recognizer.recognize_google(audio, language=self.config['language'])
         
+        print(f"DEBUG: Google ASR returned text: '{text}'")
         return {'text': text, 'metadata': {}}
     
     def whisper_asr(self):
@@ -561,10 +570,13 @@ class ASRApp(QMainWindow):
         reference = None
         if self.training_mode_cb.isChecked():
             reference = self.reference_text.text().strip()
+            print(f"DEBUG: Training mode enabled, reference text: '{reference}'")
             if not reference:
                 QMessageBox.warning(self, "No Reference", 
                                   "Please enter reference text for pronunciation training.")
                 return
+        else:
+            print(f"DEBUG: Training mode disabled")
         
         # Convert MP3 to WAV if needed
         audio_file = self.audio_file
@@ -593,6 +605,10 @@ class ASRApp(QMainWindow):
         self.asr_thread.start()
     
     def on_asr_finished(self, text, metadata):
+        # Debug logging
+        print(f"DEBUG: ASR finished callback called")
+        print(f"DEBUG: Metadata keys: {list(metadata.keys()) if metadata else 'None'}")
+        
         result = text
         if 'word_times' in metadata:
             result += "\n\n--- Word Timestamps ---\n" + metadata['word_times']
@@ -600,15 +616,34 @@ class ASRApp(QMainWindow):
         self.output_text.setText(result)
         
         # Handle pronunciation feedback
-        if 'pronunciation' in metadata:
+        print(f"DEBUG: Checking for pronunciation data...")
+        print(f"DEBUG: metadata is None: {metadata is None}")
+        if metadata is not None:
+            print(f"DEBUG: metadata keys: {list(metadata.keys())}")
+            print(f"DEBUG: 'pronunciation' in metadata: {'pronunciation' in metadata}")
+        
+        if metadata and 'pronunciation' in metadata:
+            print(f"DEBUG: Found pronunciation data in metadata")
             self.pronunciation_data = metadata['pronunciation']
             self.display_pronunciation_feedback(metadata['pronunciation'])
+            print(f"DEBUG: Enabling save report button")
             self.save_report_btn.setEnabled(True)
+            print(f"DEBUG: Save report button enabled: {self.save_report_btn.isEnabled()}")
+        else:
+            print(f"DEBUG: No pronunciation data found in metadata")
+            if self.training_mode_cb.isChecked():
+                print(f"DEBUG: Training mode is enabled but no pronunciation data received")
+                self.output_text.append("\n⚠ Warning: Pronunciation training enabled but no analysis performed.")
         
         self.convert_btn.setEnabled(True)
     
     def display_pronunciation_feedback(self, pron_data):
         """Display detailed pronunciation feedback"""
+        print(f"DEBUG: display_pronunciation_feedback called")
+        print(f"DEBUG: Pronunciation data keys: {list(pron_data.keys())}")
+        print(f"DEBUG: Accuracy: {pron_data.get('accuracy', 'N/A')}")
+        print(f"DEBUG: Word analysis count: {len(pron_data.get('word_analysis', []))}")
+        
         accuracy = pron_data['accuracy']
         threshold = self.config['pronunciation_threshold']
         
