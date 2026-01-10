@@ -824,6 +824,15 @@ Perfect for language learners!"""
     
     def show_config(self):
         dialog = ConfigDialog(self)
+    app = QApplication(sys.argv)
+    window = ASRApp()
+    window.show()
+    sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    main()
+        dialog = ConfigDialog(self)
         # Set current values
         dialog.engine_combo.setCurrentText(self.config['engine'])
         dialog.lang_combo.setCurrentText(self.config['language_name'])
@@ -850,3 +859,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
+    def show
