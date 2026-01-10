@@ -26,6 +26,7 @@ import re
 from gtts import gTTS
 import pygame
 import io
+from datetime import datetime
 
 
 class ConfigDialog(QDialog):
@@ -497,8 +498,14 @@ class ASRApp(QMainWindow):
         self.word_time_cb = QCheckBox("Word Timestamps")
         self.word_time_cb.setChecked(False)
         
+        # Add auto-check checkbox
+        self.auto_check_cb = QCheckBox("Auto Check After Record")
+        self.auto_check_cb.setChecked(False)
+        self.auto_check_cb.setToolTip("Automatically run ASR Convert after recording completes")
+        
         options_layout.addWidget(self.punctuation_cb)
         options_layout.addWidget(self.word_time_cb)
+        options_layout.addWidget(self.auto_check_cb)
         options_layout.addStretch()
         main_layout.addLayout(options_layout)
         
@@ -543,6 +550,15 @@ class ASRApp(QMainWindow):
         self.tabs.addTab(feedback_tab, "Pronunciation Feedback")
         
         main_layout.addWidget(self.tabs)
+        
+        # Status/Debug text box
+        self.status_text = QTextEdit()
+        self.status_text.setMaximumHeight(60)  # About 3 lines
+        self.status_text.setPlaceholderText("Status and debug information will appear here...")
+        self.status_text.setReadOnly(True)
+        font = QFont("Consolas", 9)
+        self.status_text.setFont(font)
+        main_layout.addWidget(self.status_text)
         
         # Bottom buttons
         bottom_layout = QHBoxLayout()
@@ -614,10 +630,16 @@ class ASRApp(QMainWindow):
         self.audio_file = filename
         self.file_label.setText("Recorded audio")
         self.output_text.setText("Recording complete!")
+        self.status_text.append(f"[{self.get_current_time()}] Recording completed: {os.path.basename(filename)}")
         self.is_recording = False
         self.record_btn.setText("🎤 Hold to Record")
         self.playback_btn.setEnabled(True)
         self.convert_btn.setEnabled(True)
+        
+        # Auto-check functionality
+        if self.auto_check_cb.isChecked():
+            self.status_text.append(f"[{self.get_current_time()}] Auto-check enabled - starting ASR conversion...")
+            self.convert_audio()
     
     def on_error(self, error_msg):
         QMessageBox.critical(self, "Error", error_msg)
@@ -948,6 +970,10 @@ Built with PyQt5 and Python.
 Perfect for language learners!"""
         
         QMessageBox.about(self, "About ASR App", about_text)
+    
+    def get_current_time(self):
+        """Get current timestamp for status messages"""
+        return datetime.now().strftime("%H:%M:%S")
     
     def show_config(self):
         dialog = ConfigDialog(self)
