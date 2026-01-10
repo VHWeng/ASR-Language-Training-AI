@@ -123,36 +123,7 @@ class ConfigDialog(QDialog):
         settings_group.setLayout(settings_layout)
         layout.addWidget(settings_group)
         
-        # Requirements info
-        req_group = QGroupBox("Setup Requirements")
-        req_layout = QVBoxLayout()
-        req_text = QTextEdit()
-        req_text.setReadOnly(True)
-        req_text.setMaximumHeight(150)
-        
-        requirements = """Required packages:
-• pip install PyQt5
-• pip install SpeechRecognition
-• pip install sounddevice soundfile
-• pip install pydub
-• pip install openai-whisper
-• pip install numpy
 
-For audio playback:
-• Install FFmpeg for MP3 support
-
-For Whisper:
-• Requires PyTorch (CPU or GPU version)
-• First run will download model files
-
-For Pronunciation Training:
-• Uses phonetic comparison algorithms
-• Whisper recommended for better accuracy
-"""
-        req_text.setText(requirements)
-        req_layout.addWidget(req_text)
-        req_group.setLayout(req_layout)
-        layout.addWidget(req_group)
         
         # Buttons
         btn_layout = QHBoxLayout()

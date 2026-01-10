@@ -1,0 +1,11 @@
+PyQt5>=5.15.0
+SpeechRecognition>=3.8.1
+sounddevice>=0.4.1
+soundfile>=0.10.2
+pydub>=0.25.1
+openai-whisper>=20231117
+numpy>=1.19.0
+
+# Additional system requirements:
+# FFmpeg - for MP3 support (install separately)
+# PyTorch - for Whisper (will be installed automatically with whisper)
