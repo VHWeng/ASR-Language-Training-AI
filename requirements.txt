@@ -5,6 +5,8 @@ soundfile>=0.10.2
 pydub>=0.25.1
 openai-whisper>=20231117
 numpy>=1.19.0
+gTTS>=2.5.1
+pygame>=2.5.2
 
 # Additional system requirements:
 # FFmpeg - for MP3 support (install separately)

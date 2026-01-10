@@ -23,6 +23,9 @@ import whisper
 import tempfile
 from difflib import SequenceMatcher
 import re
+from gtts import gTTS
+import pygame
+import io
 
 
 class ConfigDialog(QDialog):
@@ -154,7 +157,7 @@ class ConfigDialog(QDialog):
                 "telephony"         # NEW: Phone call optimization
             ])
         else:  # Whisper
-            self.model_combo.addItems(["tiny", "base", "small", "medium", "large"])
+            self.model_combo.addItems(['tiny.en', 'tiny', 'base.en', 'base', 'small.en', 'small', 'medium.en', 'medium', 'large-v1', 'large-v2', 'large-v3', 'large'])
             self.model_combo.setCurrentText("base")
     
     def get_config(self):
@@ -381,7 +384,7 @@ class ASRApp(QMainWindow):
             'engine': 'Google Speech Recognition',
             'language': 'el-GR',
             'language_name': 'Greek',
-            'model': 'Default',
+            'model': 'chirp_3',
             'sample_rate': 16000,
             'energy_threshold': 300,
             'pronunciation_threshold': 80
@@ -436,6 +439,12 @@ class ASRApp(QMainWindow):
         self.reference_text.setPlaceholderText("Enter the text you want to practice...")
         self.reference_text.setEnabled(False)
         ref_layout.addWidget(self.reference_text)
+        
+        # Add TTS button
+        self.tts_btn = QPushButton("🔊 Play TTS")
+        self.tts_btn.clicked.connect(self.play_tts)
+        self.tts_btn.setEnabled(False)
+        ref_layout.addWidget(self.tts_btn)
         
         pron_layout.addWidget(self.training_mode_cb)
         pron_layout.addLayout(ref_layout)
@@ -558,6 +567,7 @@ class ASRApp(QMainWindow):
     
     def toggle_training_mode(self, enabled):
         self.reference_text.setEnabled(enabled)
+        self.tts_btn.setEnabled(enabled)
         if enabled:
             self.tabs.setCurrentIndex(1)  # Switch to feedback tab
     
@@ -784,6 +794,36 @@ class ASRApp(QMainWindow):
         # Switch to feedback tab
         self.tabs.setCurrentIndex(1)
     
+    def play_tts(self):
+        """Play text-to-speech for the reference text"""
+        text = self.reference_text.text().strip()
+        if not text:
+            QMessageBox.warning(self, "No Text", "Please enter text to convert to speech.")
+            return
+        
+        try:
+            # Get language code from config (first part before dash)
+            lang_code = self.config['language'].split('-')[0].lower()
+            
+            # Create TTS object
+            tts = gTTS(text=text, lang=lang_code, slow=False)
+            
+            # Create temporary file in memory
+            mp3_fp = io.BytesIO()
+            tts.write_to_fp(mp3_fp)
+            mp3_fp.seek(0)
+            
+            # Initialize pygame mixer
+            pygame.mixer.init()
+            pygame.mixer.music.load(mp3_fp)
+            pygame.mixer.music.play()
+            
+            self.output_text.append(f"🔊 Playing TTS: '{text}' in {self.config['language_name']}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "TTS Error", f"Failed to play text-to-speech: {str(e)}")
+            self.output_text.append(f"❌ TTS Error: {str(e)}")
+    
     def on_error(self, error_msg):
         QMessageBox.critical(self, "Error", error_msg)
         self.record_btn.setEnabled(True)
@@ -848,8 +888,9 @@ BASIC USAGE:
 PRONUNCIATION TRAINING MODE:
 1. Enable "Pronunciation Training Mode"
 2. Enter the reference text you want to practice
-3. Record yourself reading the text
-4. Click "ASR Convert" to get feedback
+3. Click "Play TTS" to hear the correct pronunciation
+4. Record yourself reading the text
+5. Click "ASR Convert" to get feedback
 
 FEEDBACK INCLUDES:
 • Overall pronunciation accuracy score
@@ -897,6 +938,7 @@ NEW FEATURES:
 • Training recommendations
 • Detailed feedback reports
 • Push-to-start/Push-to-stop recording
+• Text-to-Speech (TTS) pronunciation guide
 
 Default Language: Greek (el-GR)
 
