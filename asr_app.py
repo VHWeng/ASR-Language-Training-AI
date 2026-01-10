@@ -127,7 +127,48 @@ class ConfigDialog(QDialog):
         settings_group.setLayout(settings_layout)
         layout.addWidget(settings_group)
         
-
+        # Ollama AI Configuration
+        ollama_group = QGroupBox("Ollama AI Interface")
+        ollama_layout = QVBoxLayout()
+        
+        # Model selection
+        model_layout = QHBoxLayout()
+        self.ollama_model_label = QLabel("AI Model:")
+        self.ollama_model_combo = QComboBox()
+        self.ollama_models = [
+            "kimi-k2:1t-cloud",
+            "llama3.2",
+            "mistral",
+            "phi3",
+            "gemma2",
+            "qwen2"
+        ]
+        self.ollama_model_combo.addItems(self.ollama_models)
+        self.ollama_model_combo.setCurrentText("kimi-k2:1t-cloud")
+        
+        # Update model list button
+        self.update_models_btn = QPushButton("Update Models")
+        self.update_models_btn.clicked.connect(self.update_ollama_models)
+        
+        model_layout.addWidget(self.ollama_model_label)
+        model_layout.addWidget(self.ollama_model_combo)
+        model_layout.addWidget(self.update_models_btn)
+        ollama_layout.addLayout(model_layout)
+        
+        # Test AI model button
+        self.test_ai_btn = QPushButton("Test AI Model")
+        self.test_ai_btn.clicked.connect(self.test_ollama_model)
+        ollama_layout.addWidget(self.test_ai_btn)
+        
+        # AI status text box
+        self.ai_status_text = QTextEdit()
+        self.ai_status_text.setMaximumHeight(100)
+        self.ai_status_text.setPlaceholderText("AI model test results and status will appear here...")
+        self.ai_status_text.setReadOnly(True)
+        ollama_layout.addWidget(self.ai_status_text)
+        
+        ollama_group.setLayout(ollama_layout)
+        layout.addWidget(ollama_group)
         
         # Buttons
         btn_layout = QHBoxLayout()
@@ -161,8 +202,82 @@ class ConfigDialog(QDialog):
             self.model_combo.addItems(['tiny.en', 'tiny', 'base.en', 'base', 'small.en', 'small', 'medium.en', 'medium', 'large-v1', 'large-v2', 'large-v3', 'large'])
             self.model_combo.setCurrentText("base")
     
+    def update_ollama_models(self):
+        """Update the list of available Ollama models"""
+        try:
+            import subprocess
+            import json
+            
+            # Try to get list of models from Ollama
+            result = subprocess.run(['ollama', 'list'], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                # Parse the output to extract model names
+                lines = result.stdout.strip().split('\n')
+                models = []
+                for line in lines[1:]:  # Skip header
+                    if line.strip():
+                        model_name = line.split()[0]
+                        models.append(model_name)
+                
+                if models:
+                    self.ollama_model_combo.clear()
+                    self.ollama_model_combo.addItems(models)
+                    self.ai_status_text.append(f"[{self.parent().get_current_time()}] Successfully updated model list ({len(models)} models found)")
+                else:
+                    self.ai_status_text.append(f"[{self.parent().get_current_time()}] No models found in Ollama")
+            else:
+                self.ai_status_text.append(f"[{self.parent().get_current_time()}] Failed to get model list: {result.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            self.ai_status_text.append(f"[{self.parent().get_current_time()}] Timeout while trying to get model list")
+        except FileNotFoundError:
+            self.ai_status_text.append(f"[{self.parent().get_current_time()}] Ollama not found. Please install Ollama first.")
+        except Exception as e:
+            self.ai_status_text.append(f"[{self.parent().get_current_time()}] Error updating models: {str(e)}")
+    
+    def test_ollama_model(self):
+        """Test if the selected Ollama model is working"""
+        try:
+            import subprocess
+            import json
+            
+            selected_model = self.ollama_model_combo.currentText()
+            self.ai_status_text.append(f"[{self.parent().get_current_time()}] Testing model: {selected_model}")
+            
+            # Test prompt
+            test_prompt = "Say hello in English"
+            
+            # Prepare the request
+            request_data = {
+                "model": selected_model,
+                "prompt": test_prompt,
+                "stream": False
+            }
+            
+            # Run Ollama generate command
+            result = subprocess.run([
+                'ollama', 'run', selected_model, test_prompt
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                response = result.stdout.strip()
+                self.ai_status_text.append(f"[{self.parent().get_current_time()}] ✅ Model test successful!")
+                self.ai_status_text.append(f"Response: {response}")
+            else:
+                self.ai_status_text.append(f"[{self.parent().get_current_time()}] ❌ Model test failed:")
+                self.ai_status_text.append(f"Error: {result.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            self.ai_status_text.append(f"[{self.parent().get_current_time()}] ❌ Timeout while testing model")
+        except FileNotFoundError:
+            self.ai_status_text.append(f"[{self.parent().get_current_time()}] ❌ Ollama not found. Please install Ollama first.")
+        except Exception as e:
+            self.ai_status_text.append(f"[{self.parent().get_current_time()}] ❌ Error testing model: {str(e)}")
+    
     def get_config(self):
-        return {
+        config = {
             'engine': self.engine_combo.currentText(),
             'language': self.languages[self.lang_combo.currentText()],
             'language_name': self.lang_combo.currentText(),
@@ -171,6 +286,11 @@ class ConfigDialog(QDialog):
             'energy_threshold': int(self.energy_entry.text()),
             'pronunciation_threshold': self.pron_spin.value()
         }
+        
+        # Add Ollama configuration
+        config['ollama_model'] = self.ollama_model_combo.currentText()
+        
+        return config
 
 
 import threading
@@ -388,7 +508,8 @@ class ASRApp(QMainWindow):
             'model': 'chirp_3',
             'sample_rate': 16000,
             'energy_threshold': 300,
-            'pronunciation_threshold': 80
+            'pronunciation_threshold': 80,
+            'ollama_model': 'kimi-k2:1t-cloud'
         }
         self.pronunciation_data = None
         self.init_ui()
@@ -430,10 +551,27 @@ class ASRApp(QMainWindow):
         pron_group = QGroupBox("Pronunciation Training Mode")
         pron_layout = QVBoxLayout()
         
+        # First row: Training mode and AI checkboxes
+        mode_layout = QHBoxLayout()
         self.training_mode_cb = QCheckBox("Enable Pronunciation Training")
         self.training_mode_cb.setChecked(False)
         self.training_mode_cb.toggled.connect(self.toggle_training_mode)
         
+        self.show_pronunciation_cb = QCheckBox("Show Pronunciation")
+        self.show_pronunciation_cb.setChecked(True)
+        self.show_pronunciation_cb.toggled.connect(self.toggle_pronunciation_display)
+        
+        self.show_definition_cb = QCheckBox("Show Definition/Translation")
+        self.show_definition_cb.setChecked(True)
+        self.show_definition_cb.toggled.connect(self.toggle_definition_display)
+        
+        mode_layout.addWidget(self.training_mode_cb)
+        mode_layout.addWidget(self.show_pronunciation_cb)
+        mode_layout.addWidget(self.show_definition_cb)
+        mode_layout.addStretch()
+        pron_layout.addLayout(mode_layout)
+        
+        # Reference text row
         ref_layout = QHBoxLayout()
         ref_layout.addWidget(QLabel("Reference Text:"))
         self.reference_text = QLineEdit()
@@ -447,8 +585,24 @@ class ASRApp(QMainWindow):
         self.tts_btn.setEnabled(False)
         ref_layout.addWidget(self.tts_btn)
         
-        pron_layout.addWidget(self.training_mode_cb)
         pron_layout.addLayout(ref_layout)
+        
+        # Pronunciation text box (hidden by default)
+        self.pronunciation_text = QTextEdit()
+        self.pronunciation_text.setMaximumHeight(60)
+        self.pronunciation_text.setPlaceholderText("Pronunciation information from Ollama AI will appear here...")
+        self.pronunciation_text.setReadOnly(True)
+        self.pronunciation_text.hide()
+        pron_layout.addWidget(self.pronunciation_text)
+        
+        # Definition text box (hidden by default)
+        self.definition_text = QTextEdit()
+        self.definition_text.setMaximumHeight(80)
+        self.definition_text.setPlaceholderText("Definition/translation from Ollama AI will appear here...")
+        self.definition_text.setReadOnly(True)
+        self.definition_text.hide()
+        pron_layout.addWidget(self.definition_text)
+        
         pron_group.setLayout(pron_layout)
         main_layout.addWidget(pron_group)
         
@@ -586,6 +740,24 @@ class ASRApp(QMainWindow):
         self.tts_btn.setEnabled(enabled)
         if enabled:
             self.tabs.setCurrentIndex(1)  # Switch to feedback tab
+    
+    def toggle_pronunciation_display(self, enabled):
+        """Toggle pronunciation text box visibility"""
+        if enabled:
+            self.pronunciation_text.show()
+            # Also show definition if it's enabled
+            if self.show_definition_cb.isChecked():
+                self.definition_text.show()
+        else:
+            self.pronunciation_text.hide()
+            self.definition_text.hide()
+    
+    def toggle_definition_display(self, enabled):
+        """Toggle definition text box visibility"""
+        if enabled and self.show_pronunciation_cb.isChecked():
+            self.definition_text.show()
+        else:
+            self.definition_text.hide()
     
     def browse_file(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -984,6 +1156,12 @@ Perfect for language learners!"""
         dialog.rate_entry.setText(str(self.config['sample_rate']))
         dialog.energy_entry.setText(str(self.config['energy_threshold']))
         dialog.pron_spin.setValue(self.config['pronunciation_threshold'])
+        
+        # Set Ollama model if it exists in config
+        if 'ollama_model' in self.config:
+            index = dialog.ollama_model_combo.findText(self.config['ollama_model'])
+            if index >= 0:
+                dialog.ollama_model_combo.setCurrentIndex(index)
         
         if dialog.exec_() == QDialog.Accepted:
             self.config = dialog.get_config()
