@@ -169,29 +169,66 @@ class ConfigDialog(QDialog):
         }
 
 
+import threading
+import queue
+
 class RecordThread(QThread):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
     
-    def __init__(self, duration=10, sample_rate=16000):
+    def __init__(self, sample_rate=16000):
         super().__init__()
-        self.duration = duration
         self.sample_rate = sample_rate
         self.filename = None
+        self.is_recording = True  # Flag to control recording
+        self.audio_queue = queue.Queue()
+        self.recording_thread = None
     
     def run(self):
         try:
-            recording = sd.rec(int(self.duration * self.sample_rate), 
-                             samplerate=self.sample_rate, 
-                             channels=1, 
-                             dtype='float32')
-            sd.wait()
+            # Initialize recording buffer
+            recording_buffer = []
             
-            self.filename = tempfile.mktemp(suffix='.wav')
-            sf.write(self.filename, recording, self.sample_rate)
-            self.finished.emit(self.filename)
+            # Callback function to capture audio chunks
+            def audio_callback(indata, frames, time, status):
+                if self.is_recording:
+                    recording_buffer.append(indata.copy())
+            
+            # Start the stream
+            stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype='float32',
+                callback=audio_callback
+            )
+            
+            stream.start()
+            
+            # Keep recording until flag is changed
+            while self.is_recording:
+                sd.sleep(100)  # Sleep for 100ms to avoid busy waiting
+            
+            # Stop the stream
+            stream.stop()
+            stream.close()
+            
+            # Combine all recorded chunks
+            if recording_buffer:
+                import numpy as np
+                full_recording = np.concatenate(recording_buffer, axis=0)
+                
+                self.filename = tempfile.mktemp(suffix='.wav')
+                sf.write(self.filename, full_recording, self.sample_rate)
+                self.finished.emit(self.filename)
+            else:
+                self.error.emit("No audio recorded")
+                
         except Exception as e:
             self.error.emit(str(e))
+    
+    def stop_recording(self):
+        """Stop the recording"""
+        self.is_recording = False
 
 
 class ASRThread(QThread):
@@ -421,8 +458,13 @@ class ASRApp(QMainWindow):
         # Control buttons
         control_layout = QHBoxLayout()
         
-        self.record_btn = QPushButton("🎤 Record")
-        self.record_btn.clicked.connect(self.record_audio)
+        self.record_btn = QPushButton("🎤 Hold to Record")
+        self.record_btn.pressed.connect(self.start_recording)
+        self.record_btn.released.connect(self.stop_recording)
+        self.is_recording = False
+        
+        # Set button style to make it clear it's a press-and-hold button
+        self.record_btn.setStyleSheet("QPushButton { font-weight: bold; padding: 10px; }")
         
         self.playback_btn = QPushButton("▶ Playback")
         self.playback_btn.clicked.connect(self.playback_audio)
@@ -530,24 +572,50 @@ class ASRApp(QMainWindow):
             self.playback_btn.setEnabled(True)
             self.convert_btn.setEnabled(True)
     
-    def record_audio(self):
-        self.record_btn.setEnabled(False)
-        self.output_text.setText("Recording for 10 seconds...")
+    def start_recording(self):
+        if self.is_recording:
+            return
         
-        self.record_thread = RecordThread(duration=10, 
-                                         sample_rate=self.config['sample_rate'])
+        self.is_recording = True
+        self.record_btn.setText("⏹️ Stop Recording")
+        self.output_text.setText("Recording... Release button to stop")
+        
+        self.record_thread = RecordThread(sample_rate=self.config['sample_rate'])
         self.record_thread.finished.connect(self.on_record_finished)
         self.record_thread.error.connect(self.on_error)
         self.record_thread.start()
+    
+    def stop_recording(self):
+        if not self.is_recording:
+            return
+        
+        self.is_recording = False
+        self.record_btn.setText("🎤 Hold to Record")
+        
+        if hasattr(self, 'record_thread') and self.record_thread:
+            self.record_thread.stop_recording()
+    
+    def record_audio(self):
+        # This method is kept for compatibility but not used for the hold-to-record functionality
+        pass
     
     def on_record_finished(self, filename):
         self.recorded_file = filename
         self.audio_file = filename
         self.file_label.setText("Recorded audio")
         self.output_text.setText("Recording complete!")
-        self.record_btn.setEnabled(True)
+        self.is_recording = False
+        self.record_btn.setText("🎤 Hold to Record")
         self.playback_btn.setEnabled(True)
         self.convert_btn.setEnabled(True)
+    
+    def on_error(self, error_msg):
+        QMessageBox.critical(self, "Error", error_msg)
+        self.is_recording = False
+        self.record_btn.setText("🎤 Hold to Record")
+        self.record_btn.setEnabled(True)  # Re-enable the button
+        self.convert_btn.setEnabled(True)
+        self.output_text.setText(f"Error: {error_msg}")
     
     def playback_audio(self):
         if not self.audio_file:
@@ -769,7 +837,7 @@ class ASRApp(QMainWindow):
 BASIC USAGE:
 1. Load or Record Audio:
    - Browse for WAV/MP3 file, or
-   - Click Record to capture 10 seconds
+   - Press and hold 'Hold to Record' button to start recording, release to stop
 
 2. Configure Settings:
    - Click ⚙ to select engine, language, and model
@@ -809,7 +877,8 @@ TIPS FOR BEST RESULTS:
 • Use Whisper engine for better accuracy
 • Speak clearly and at moderate pace
 • Ensure quiet recording environment
-• Practice difficult words individually"""
+• Practice difficult words individually
+• Hold the record button to start recording, release to stop"""
         
         QMessageBox.information(self, "Help", help_text)
     
@@ -827,6 +896,7 @@ NEW FEATURES:
 • Mispronunciation detection
 • Training recommendations
 • Detailed feedback reports
+• Push-to-start/Push-to-stop recording
 
 Default Language: Greek (el-GR)
 
