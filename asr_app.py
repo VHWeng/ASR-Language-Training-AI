@@ -585,6 +585,25 @@ class ASRApp(QMainWindow):
         self.reference_text.setPlaceholderText("Enter the text you want to practice...")
         self.reference_text.setEnabled(True)  # Default enabled
         self.reference_text.returnPressed.connect(self.load_ai_data)  # Enter key handler
+        
+        # Add font size controls for reference text
+        font_control_layout = QHBoxLayout()
+        font_control_layout.setSpacing(2)
+        
+        self.ref_font_minus_btn = QPushButton("-")
+        self.ref_font_minus_btn.setFixedWidth(25)
+        self.ref_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.reference_text, -1))
+        self.ref_font_minus_btn.setToolTip("Decrease font size")
+        
+        self.ref_font_plus_btn = QPushButton("+")
+        self.ref_font_plus_btn.setFixedWidth(25)
+        self.ref_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.reference_text, 1))
+        self.ref_font_plus_btn.setToolTip("Increase font size")
+        
+        font_control_layout.addWidget(self.ref_font_minus_btn)
+        font_control_layout.addWidget(self.ref_font_plus_btn)
+        
+        ref_layout.addLayout(font_control_layout)
         ref_layout.addWidget(self.reference_text)
         
         # Add Load AI button
@@ -615,6 +634,23 @@ class ASRApp(QMainWindow):
         self.pronunciation_text.setPlaceholderText("Pronunciation information from Ollama AI will appear here...")
         self.pronunciation_text.setReadOnly(True)
         self.pronunciation_text.show()  # Show by default
+        
+        # Add font size controls for pronunciation text
+        pron_font_layout = QHBoxLayout()
+        self.pron_font_minus_btn = QPushButton("-")
+        self.pron_font_minus_btn.setFixedWidth(25)
+        self.pron_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.pronunciation_text, -1))
+        self.pron_font_minus_btn.setToolTip("Decrease font size")
+        
+        self.pron_font_plus_btn = QPushButton("+")
+        self.pron_font_plus_btn.setFixedWidth(25)
+        self.pron_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.pronunciation_text, 1))
+        self.pron_font_plus_btn.setToolTip("Increase font size")
+        
+        pron_font_layout.addWidget(self.pron_font_minus_btn)
+        pron_font_layout.addWidget(self.pron_font_plus_btn)
+        pron_font_layout.addStretch()
+        pron_layout.addLayout(pron_font_layout)
         pron_layout.addWidget(self.pronunciation_text)
         
         # Definition text box (visible by default since training mode is enabled)
@@ -623,6 +659,23 @@ class ASRApp(QMainWindow):
         self.definition_text.setPlaceholderText("Definition/translation from Ollama AI will appear here...")
         self.definition_text.setReadOnly(True)
         self.definition_text.show()  # Show by default
+        
+        # Add font size controls for definition text
+        def_font_layout = QHBoxLayout()
+        self.def_font_minus_btn = QPushButton("-")
+        self.def_font_minus_btn.setFixedWidth(25)
+        self.def_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.definition_text, -1))
+        self.def_font_minus_btn.setToolTip("Decrease font size")
+        
+        self.def_font_plus_btn = QPushButton("+")
+        self.def_font_plus_btn.setFixedWidth(25)
+        self.def_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.definition_text, 1))
+        self.def_font_plus_btn.setToolTip("Increase font size")
+        
+        def_font_layout.addWidget(self.def_font_minus_btn)
+        def_font_layout.addWidget(self.def_font_plus_btn)
+        def_font_layout.addStretch()
+        pron_layout.addLayout(def_font_layout)
         pron_layout.addWidget(self.definition_text)
         
         pron_group.setLayout(pron_layout)
@@ -695,6 +748,23 @@ class ASRApp(QMainWindow):
         self.output_text.setMinimumHeight(150)
         font = QFont("Consolas", 10)
         self.output_text.setFont(font)
+        
+        # Add font size controls for output text
+        output_font_layout = QHBoxLayout()
+        self.output_font_minus_btn = QPushButton("-")
+        self.output_font_minus_btn.setFixedWidth(25)
+        self.output_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.output_text, -1))
+        self.output_font_minus_btn.setToolTip("Decrease font size")
+        
+        self.output_font_plus_btn = QPushButton("+")
+        self.output_font_plus_btn.setFixedWidth(25)
+        self.output_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.output_text, 1))
+        self.output_font_plus_btn.setToolTip("Increase font size")
+        
+        output_font_layout.addWidget(self.output_font_minus_btn)
+        output_font_layout.addWidget(self.output_font_plus_btn)
+        output_font_layout.addStretch()
+        asr_layout.addLayout(output_font_layout)
         asr_layout.addWidget(self.output_text)
         asr_tab.setLayout(asr_layout)
         
@@ -718,6 +788,23 @@ class ASRApp(QMainWindow):
         self.feedback_text = QTextEdit()
         self.feedback_text.setReadOnly(True)
         self.feedback_text.setFont(font)
+        
+        # Add font size controls for feedback text
+        feedback_font_layout = QHBoxLayout()
+        self.feedback_font_minus_btn = QPushButton("-")
+        self.feedback_font_minus_btn.setFixedWidth(25)
+        self.feedback_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.feedback_text, -1))
+        self.feedback_font_minus_btn.setToolTip("Decrease font size")
+        
+        self.feedback_font_plus_btn = QPushButton("+")
+        self.feedback_font_plus_btn.setFixedWidth(25)
+        self.feedback_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.feedback_text, 1))
+        self.feedback_font_plus_btn.setToolTip("Increase font size")
+        
+        feedback_font_layout.addWidget(self.feedback_font_minus_btn)
+        feedback_font_layout.addWidget(self.feedback_font_plus_btn)
+        feedback_font_layout.addStretch()
+        feedback_layout.addLayout(feedback_font_layout)
         feedback_layout.addWidget(self.feedback_text)
         
         feedback_tab.setLayout(feedback_layout)
@@ -734,6 +821,23 @@ class ASRApp(QMainWindow):
         self.status_text.setReadOnly(True)
         font = QFont("Consolas", 9)
         self.status_text.setFont(font)
+        
+        # Add font size controls for status text
+        status_font_layout = QHBoxLayout()
+        self.status_font_minus_btn = QPushButton("-")
+        self.status_font_minus_btn.setFixedWidth(25)
+        self.status_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.status_text, -1))
+        self.status_font_minus_btn.setToolTip("Decrease font size")
+        
+        self.status_font_plus_btn = QPushButton("+")
+        self.status_font_plus_btn.setFixedWidth(25)
+        self.status_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.status_text, 1))
+        self.status_font_plus_btn.setToolTip("Increase font size")
+        
+        status_font_layout.addWidget(self.status_font_minus_btn)
+        status_font_layout.addWidget(self.status_font_plus_btn)
+        status_font_layout.addStretch()
+        main_layout.addLayout(status_font_layout)
         main_layout.addWidget(self.status_text)
         
         # Bottom buttons
@@ -1349,6 +1453,52 @@ Built with PyQt5 and Python.
 Perfect for language learners!"""
         
         QMessageBox.about(self, "About ASR App", about_text)
+    
+    def change_font_size(self, text_widget, delta):
+        """Change font size for text widgets
+        Args:
+            text_widget: The text widget to modify (QLineEdit or QTextEdit)
+            delta: Size change (+1 to increase, -1 to decrease)
+        """
+        try:
+            # Get current font
+            if isinstance(text_widget, QLineEdit):
+                current_font = text_widget.font()
+            else:  # QTextEdit
+                current_font = text_widget.currentFont()
+            
+            # Get current point size
+            current_size = current_font.pointSize()
+            if current_size == -1:  # If pointSize returns -1, use default
+                current_size = 10
+            
+            # Calculate new size (minimum 6pt, maximum 72pt)
+            new_size = max(6, min(72, current_size + delta))
+            
+            # Apply new font size
+            current_font.setPointSize(new_size)
+            
+            if isinstance(text_widget, QLineEdit):
+                text_widget.setFont(current_font)
+            else:  # QTextEdit
+                text_widget.selectAll()
+                text_widget.setCurrentFont(current_font)
+                text_widget.setTextColor(text_widget.textColor())  # Reset selection
+            
+            # Update status
+            widget_name = {
+                self.reference_text: "Reference Text",
+                self.pronunciation_text: "Pronunciation",
+                self.definition_text: "Definition",
+                self.output_text: "ASR Output",
+                self.feedback_text: "Feedback",
+                self.status_text: "Status"
+            }.get(text_widget, "Unknown")
+            
+            self.status_text.append(f"[{self.get_current_time()}] {widget_name} font size changed to {new_size}pt")
+            
+        except Exception as e:
+            self.status_text.append(f"[{self.get_current_time()}] Font size change error: {str(e)}")
     
     def get_current_time(self):
         """Get current timestamp for status messages"""
