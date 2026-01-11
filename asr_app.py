@@ -585,6 +585,7 @@ class ASRApp(QMainWindow):
         self.reference_text.setPlaceholderText("Enter the text you want to practice...")
         self.reference_text.setEnabled(True)  # Default enabled
         self.reference_text.returnPressed.connect(self.load_ai_data)  # Enter key handler
+        self.reference_text.textChanged.connect(self.update_ipa_display)  # Connect to IPA update
         
         # Add font size controls for reference text
         font_control_layout = QHBoxLayout()
@@ -627,6 +628,15 @@ class ASRApp(QMainWindow):
         ref_layout.addWidget(self.slow_tts_btn)
         
         pron_layout.addLayout(ref_layout)
+        
+        # IPA pronunciation display
+        self.ipa_display = QTextEdit()
+        self.ipa_display.setMaximumHeight(40)
+        self.ipa_display.setPlaceholderText("IPA pronunciation will appear here...")
+        self.ipa_display.setReadOnly(True)
+        self.ipa_display.setFont(QFont("Arial", 12))  # Larger font for IPA symbols
+        self.ipa_display.setStyleSheet("QTextEdit { font-family: Arial; }")
+        pron_layout.addWidget(self.ipa_display)
         
         # Pronunciation text box (visible by default since training mode is enabled)
         self.pronunciation_text = QTextEdit()
@@ -1453,6 +1463,97 @@ Built with PyQt5 and Python.
 Perfect for language learners!"""
         
         QMessageBox.about(self, "About ASR App", about_text)
+    
+    def text_to_ipa(self, text):
+        """Convert English text to IPA pronunciation
+        Args:
+            text: English text to convert
+        Returns:
+            IPA pronunciation string
+        """
+        # Simple English to IPA mapping
+        # This is a basic implementation - for production use, consider using a proper IPA library
+        ipa_map = {
+            # Vowels
+            'a': 'æ', 'A': 'ɑ',
+            'e': 'ɛ', 'E': 'eɪ',
+            'i': 'ɪ', 'I': 'aɪ',
+            'o': 'ɑ', 'O': 'oʊ',
+            'u': 'ʌ', 'U': 'ju',
+            # Consonants
+            'b': 'b', 'c': 'k', 'd': 'd', 'f': 'f', 'g': 'ɡ',
+            'h': 'h', 'j': 'dʒ', 'k': 'k', 'l': 'l', 'm': 'm',
+            'n': 'n', 'p': 'p', 'q': 'k', 'r': 'ɹ', 's': 's',
+            't': 't', 'v': 'v', 'w': 'w', 'x': 'ks', 'y': 'j', 'z': 'z',
+            # Common digraphs
+            'th': 'θ', 'TH': 'ð',
+            'sh': 'ʃ', 'SH': 'ʃ',
+            'ch': 'tʃ', 'CH': 'tʃ',
+            'ph': 'f', 'PH': 'f',
+            'wh': 'w', 'WH': 'w',
+            'ng': 'ŋ', 'NG': 'ŋ',
+            # Common vowel combinations
+            'ee': 'i', 'EE': 'i',
+            'oo': 'u', 'OO': 'u',
+            'ea': 'i', 'EA': 'i',
+            'ou': 'aʊ', 'OU': 'aʊ',
+            'ow': 'aʊ', 'OW': 'aʊ',
+            'ai': 'eɪ', 'AI': 'eɪ',
+            'ay': 'eɪ', 'AY': 'eɪ',
+            'oi': 'ɔɪ', 'OI': 'ɔɪ',
+            'oy': 'ɔɪ', 'OY': 'ɔɪ',
+            'ie': 'aɪ', 'IE': 'aɪ',
+            'ei': 'eɪ', 'EI': 'eɪ',
+            'ey': 'eɪ', 'EY': 'eɪ',
+        }
+        
+        # Handle punctuation and spacing
+        result = []
+        i = 0
+        while i < len(text):
+            # Check for two-character combinations first
+            if i < len(text) - 1:
+                two_char = text[i:i+2]
+                if two_char in ipa_map:
+                    result.append(ipa_map[two_char])
+                    i += 2
+                    continue
+            
+            # Check for single characters
+            char = text[i]
+            if char in ipa_map:
+                result.append(ipa_map[char])
+            elif char.isspace():
+                result.append(char)
+            elif char in '.!?,:;\'"()[]{}':
+                result.append(char)
+            else:
+                # Keep unrecognized characters as-is
+                result.append(char)
+            i += 1
+        
+        return ''.join(result)
+    
+    def update_ipa_display(self):
+        """Update IPA display when reference text changes"""
+        try:
+            english_text = self.reference_text.text().strip()
+            if not english_text:
+                self.ipa_display.setPlainText("")
+                return
+            
+            # Convert to IPA
+            ipa_text = self.text_to_ipa(english_text)
+            
+            # Display both English and IPA
+            display_text = f"{english_text}\n{ipa_text}"
+            self.ipa_display.setPlainText(display_text)
+            
+            # Update status
+            self.status_text.append(f"[{self.get_current_time()}] IPA pronunciation updated")
+            
+        except Exception as e:
+            self.status_text.append(f"[{self.get_current_time()}] IPA conversion error: {str(e)}")
     
     def change_font_size(self, text_widget, delta):
         """Change font size for text widgets
