@@ -585,7 +585,7 @@ class ASRApp(QMainWindow):
         self.reference_text.setPlaceholderText("Enter the text you want to practice...")
         self.reference_text.setEnabled(True)  # Default enabled
         self.reference_text.returnPressed.connect(self.load_ai_data)  # Enter key handler
-        self.reference_text.textChanged.connect(self.update_ipa_display)  # Connect to IPA update
+        self.reference_text.textChanged.connect(self.update_combined_pronunciation)  # Connect to combined pronunciation update
         
         # Add font size controls for reference text
         font_control_layout = QHBoxLayout()
@@ -629,20 +629,14 @@ class ASRApp(QMainWindow):
         
         pron_layout.addLayout(ref_layout)
         
-        # IPA pronunciation display
-        self.ipa_display = QTextEdit()
-        self.ipa_display.setMaximumHeight(40)
-        self.ipa_display.setPlaceholderText("IPA pronunciation will appear here...")
-        self.ipa_display.setReadOnly(True)
-        self.ipa_display.setFont(QFont("Arial", 12))  # Larger font for IPA symbols
-        self.ipa_display.setStyleSheet("QTextEdit { font-family: Arial; }")
-        pron_layout.addWidget(self.ipa_display)
-        
         # Pronunciation text box (visible by default since training mode is enabled)
+        # Will display both English text (top) and IPA pronunciation (bottom)
         self.pronunciation_text = QTextEdit()
-        self.pronunciation_text.setMaximumHeight(60)
-        self.pronunciation_text.setPlaceholderText("Pronunciation information from Ollama AI will appear here...")
+        self.pronunciation_text.setMaximumHeight(80)  # Increased height for two lines
+        self.pronunciation_text.setPlaceholderText("Enter text above to see English and IPA pronunciation...")
         self.pronunciation_text.setReadOnly(True)
+        self.pronunciation_text.setFont(QFont("Arial", 11))  # Use Arial for better IPA symbol support
+        self.pronunciation_text.setStyleSheet("QTextEdit { font-family: Arial; }")
         self.pronunciation_text.show()  # Show by default
         
         # Add font size controls for pronunciation text
@@ -899,6 +893,8 @@ class ASRApp(QMainWindow):
             # Also show definition if it's enabled
             if self.show_definition_cb.isChecked():
                 self.definition_text.show()
+            # Update pronunciation display when shown
+            self.update_combined_pronunciation()
         else:
             self.pronunciation_text.hide()
             self.definition_text.hide()
@@ -1534,26 +1530,26 @@ Perfect for language learners!"""
         
         return ''.join(result)
     
-    def update_ipa_display(self):
-        """Update IPA display when reference text changes"""
+    def update_combined_pronunciation(self):
+        """Update combined pronunciation display (English + IPA) in pronunciation text box"""
         try:
             english_text = self.reference_text.text().strip()
             if not english_text:
-                self.ipa_display.setPlainText("")
+                self.pronunciation_text.setPlainText("Enter text above to see English and IPA pronunciation...")
                 return
             
             # Convert to IPA
             ipa_text = self.text_to_ipa(english_text)
             
-            # Display both English and IPA
-            display_text = f"{english_text}\n{ipa_text}"
-            self.ipa_display.setPlainText(display_text)
+            # Display both English and IPA in the pronunciation text box
+            display_text = f"English: {english_text}\nIPA:     {ipa_text}"
+            self.pronunciation_text.setPlainText(display_text)
             
             # Update status
-            self.status_text.append(f"[{self.get_current_time()}] IPA pronunciation updated")
+            self.status_text.append(f"[{self.get_current_time()}] Combined pronunciation updated")
             
         except Exception as e:
-            self.status_text.append(f"[{self.get_current_time()}] IPA conversion error: {str(e)}")
+            self.status_text.append(f"[{self.get_current_time()}] Pronunciation conversion error: {str(e)}")
     
     def change_font_size(self, text_widget, delta):
         """Change font size for text widgets
