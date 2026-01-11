@@ -955,11 +955,25 @@ class ASRApp(QMainWindow):
             ], capture_output=True, text=True, timeout=30)
             
             if pron_result.returncode == 0:
-                pronunciation = pron_result.stdout.strip()
-                self.pronunciation_text.setPlainText(pronunciation)
-                self.status_text.append(f"[{self.get_current_time()}] Pronunciation received from AI")
+                ai_pronunciation = pron_result.stdout.strip()
+                # Combine with current English text in proper format
+                english_text = self.reference_text.text().strip()
+                if english_text:
+                    combined_display = f"English: {english_text}\nIPA:     {ai_pronunciation}"
+                    self.pronunciation_text.setPlainText(combined_display)
+                else:
+                    self.pronunciation_text.setPlainText(ai_pronunciation)
+                self.status_text.append(f"[{self.get_current_time()}] AI pronunciation received: {ai_pronunciation}")
             else:
-                self.pronunciation_text.setPlainText("Failed to get pronunciation from AI")
+                # Fall back to local IPA conversion if AI fails
+                english_text = self.reference_text.text().strip()
+                if english_text:
+                    local_ipa = self.text_to_ipa(english_text)
+                    combined_display = f"English: {english_text}\nIPA:     {local_ipa} (Local conversion - AI unavailable)"
+                    self.pronunciation_text.setPlainText(combined_display)
+                    self.status_text.append(f"[{self.get_current_time()}] Using local IPA conversion")
+                else:
+                    self.pronunciation_text.setPlainText("Failed to get pronunciation from AI")
                 self.status_text.append(f"[{self.get_current_time()}] AI pronunciation request failed")
             
             # Get definition
