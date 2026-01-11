@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QFileDialog, QDialog, QComboBox, QCheckBox,
                              QLineEdit, QMessageBox, QToolButton, QGroupBox,
                              QProgressBar, QSpinBox, QTabWidget)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon, QFont, QColor, QTextCharFormat, QTextCursor
 import speech_recognition as sr
 import sounddevice as sd
@@ -27,6 +27,8 @@ from gtts import gTTS
 import pygame
 import io
 from datetime import datetime
+import time
+import threading
 
 
 class ConfigDialog(QDialog):
@@ -598,6 +600,13 @@ class ASRApp(QMainWindow):
         self.tts_btn.setEnabled(True)  # Default enabled
         ref_layout.addWidget(self.tts_btn)
         
+        # Add Slow TTS button
+        self.slow_tts_btn = QPushButton("🐢 Slow TTS")
+        self.slow_tts_btn.clicked.connect(self.play_slow_tts)
+        self.slow_tts_btn.setEnabled(True)  # Default enabled
+        self.slow_tts_btn.setToolTip("Play reference text one word at a time with pauses")
+        ref_layout.addWidget(self.slow_tts_btn)
+        
         pron_layout.addLayout(ref_layout)
         
         # Pronunciation text box (visible by default since training mode is enabled)
@@ -1135,6 +1144,86 @@ class ASRApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "TTS Error", f"Failed to play text-to-speech: {str(e)}")
             self.output_text.append(f"❌ TTS Error: {str(e)}")
+    
+    def play_slow_tts(self):
+        """Play reference text one word at a time with pauses"""
+        text = self.reference_text.text().strip()
+        if not text:
+            QMessageBox.warning(self, "No Text", "Please enter text to convert to speech.")
+            return
+        
+        try:
+            # Split text into words (handle various punctuation)
+            import re
+            words = re.findall(r'\S+', text)  # Split on whitespace, keep punctuation with words
+            
+            if not words:
+                QMessageBox.warning(self, "No Words", "No words found in the text.")
+                return
+            
+            # Disable buttons during playback
+            self.slow_tts_btn.setEnabled(False)
+            self.tts_btn.setEnabled(False)
+            
+            # Get language code
+            lang_code = self.config['language'].split('-')[0].lower()
+            
+            # Create a separate thread for word-by-word playback
+            def play_words_sequentially():
+                try:
+                    pygame.mixer.init()
+                    
+                    for i, word in enumerate(words):
+                        # Skip empty words
+                        if not word.strip():
+                            continue
+                        
+                        # Update status
+                        self.status_text.append(f"[{self.get_current_time()}] Playing word {i+1}/{len(words)}: '{word}'")
+                        
+                        # Create TTS for single word
+                        tts = gTTS(text=word, lang=lang_code, slow=True)
+                        
+                        # Create temporary file in memory
+                        mp3_fp = io.BytesIO()
+                        tts.write_to_fp(mp3_fp)
+                        mp3_fp.seek(0)
+                        
+                        # Play the word
+                        pygame.mixer.music.load(mp3_fp)
+                        pygame.mixer.music.play()
+                        
+                        # Wait for playback to finish
+                        while pygame.mixer.music.get_busy():
+                            time.sleep(0.1)
+                        
+                        # Add pause between words (500ms)
+                        if i < len(words) - 1:  # Don't pause after the last word
+                            time.sleep(0.5)
+                    
+                    # Re-enable buttons
+                    self.slow_tts_btn.setEnabled(True)
+                    self.tts_btn.setEnabled(True)
+                    self.status_text.append(f"[{self.get_current_time()}] Slow TTS playback completed")
+                    self.output_text.append(f"🐢 Slow TTS completed: {len(words)} words played")
+                    
+                except Exception as e:
+                    # Re-enable buttons on error
+                    self.slow_tts_btn.setEnabled(True)
+                    self.tts_btn.setEnabled(True)
+                    QMessageBox.critical(self, "Slow TTS Error", f"Failed to play slow text-to-speech: {str(e)}")
+                    self.output_text.append(f"❌ Slow TTS Error: {str(e)}")
+            
+            # Start the playback thread
+            playback_thread = threading.Thread(target=play_words_sequentially, daemon=True)
+            playback_thread.start()
+            
+        except Exception as e:
+            # Re-enable buttons on error
+            self.slow_tts_btn.setEnabled(True)
+            self.tts_btn.setEnabled(True)
+            QMessageBox.critical(self, "Slow TTS Error", f"Failed to initialize slow text-to-speech: {str(e)}")
+            self.output_text.append(f"❌ Slow TTS Initialization Error: {str(e)}")
     
     def on_error(self, error_msg):
         QMessageBox.critical(self, "Error", error_msg)
