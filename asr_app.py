@@ -554,7 +554,7 @@ class ASRApp(QMainWindow):
         # First row: Training mode and AI checkboxes
         mode_layout = QHBoxLayout()
         self.training_mode_cb = QCheckBox("Enable Pronunciation Training")
-        self.training_mode_cb.setChecked(False)
+        self.training_mode_cb.setChecked(True)  # Default enabled
         self.training_mode_cb.toggled.connect(self.toggle_training_mode)
         
         self.show_pronunciation_cb = QCheckBox("Show Pronunciation")
@@ -568,6 +568,11 @@ class ASRApp(QMainWindow):
         mode_layout.addWidget(self.training_mode_cb)
         mode_layout.addWidget(self.show_pronunciation_cb)
         mode_layout.addWidget(self.show_definition_cb)
+        
+        # Add AI status indicator
+        self.ai_status_indicator = QLabel("⚪ AI Disconnected")
+        self.ai_status_indicator.setStyleSheet("QLabel { color: gray; font-weight: bold; }")
+        mode_layout.addWidget(self.ai_status_indicator)
         mode_layout.addStretch()
         pron_layout.addLayout(mode_layout)
         
@@ -576,31 +581,39 @@ class ASRApp(QMainWindow):
         ref_layout.addWidget(QLabel("Reference Text:"))
         self.reference_text = QLineEdit()
         self.reference_text.setPlaceholderText("Enter the text you want to practice...")
-        self.reference_text.setEnabled(False)
+        self.reference_text.setEnabled(True)  # Default enabled
+        self.reference_text.returnPressed.connect(self.load_ai_data)  # Enter key handler
         ref_layout.addWidget(self.reference_text)
+        
+        # Add Load AI button
+        self.load_ai_btn = QPushButton("📥 Load AI")
+        self.load_ai_btn.clicked.connect(self.load_ai_data)
+        self.load_ai_btn.setEnabled(True)  # Default enabled
+        self.load_ai_btn.setToolTip("Load pronunciation and definition from AI")
+        ref_layout.addWidget(self.load_ai_btn)
         
         # Add TTS button
         self.tts_btn = QPushButton("🔊 Play TTS")
         self.tts_btn.clicked.connect(self.play_tts)
-        self.tts_btn.setEnabled(False)
+        self.tts_btn.setEnabled(True)  # Default enabled
         ref_layout.addWidget(self.tts_btn)
         
         pron_layout.addLayout(ref_layout)
         
-        # Pronunciation text box (hidden by default)
+        # Pronunciation text box (visible by default since training mode is enabled)
         self.pronunciation_text = QTextEdit()
         self.pronunciation_text.setMaximumHeight(60)
         self.pronunciation_text.setPlaceholderText("Pronunciation information from Ollama AI will appear here...")
         self.pronunciation_text.setReadOnly(True)
-        self.pronunciation_text.hide()
+        self.pronunciation_text.show()  # Show by default
         pron_layout.addWidget(self.pronunciation_text)
         
-        # Definition text box (hidden by default)
+        # Definition text box (visible by default since training mode is enabled)
         self.definition_text = QTextEdit()
         self.definition_text.setMaximumHeight(80)
         self.definition_text.setPlaceholderText("Definition/translation from Ollama AI will appear here...")
         self.definition_text.setReadOnly(True)
-        self.definition_text.hide()
+        self.definition_text.show()  # Show by default
         pron_layout.addWidget(self.definition_text)
         
         pron_group.setLayout(pron_layout)
@@ -738,8 +751,23 @@ class ASRApp(QMainWindow):
     def toggle_training_mode(self, enabled):
         self.reference_text.setEnabled(enabled)
         self.tts_btn.setEnabled(enabled)
+        self.load_ai_btn.setEnabled(enabled)
+        
         if enabled:
+            # Auto-show pronunciation and definition when training mode is enabled
+            self.show_pronunciation_cb.setChecked(True)
+            self.show_definition_cb.setChecked(True)
+            self.pronunciation_text.show()
+            self.definition_text.show()
             self.tabs.setCurrentIndex(1)  # Switch to feedback tab
+            
+            # Auto-connect to AI if text is present
+            if self.reference_text.text().strip():
+                self.load_ai_data()
+        else:
+            # Hide text boxes when training mode is disabled
+            self.pronunciation_text.hide()
+            self.definition_text.hide()
     
     def toggle_pronunciation_display(self, enabled):
         """Toggle pronunciation text box visibility"""
@@ -758,6 +786,96 @@ class ASRApp(QMainWindow):
             self.definition_text.show()
         else:
             self.definition_text.hide()
+    
+    def update_ai_status(self, status, color="gray"):
+        """Update AI status indicator"""
+        status_icons = {
+            "connected": "🟢",
+            "disconnected": "⚪", 
+            "connecting": "🟡",
+            "error": "🔴"
+        }
+        
+        icon = status_icons.get(status.lower(), "⚪")
+        status_text = f"{icon} AI {status.title()}"
+        
+        self.ai_status_indicator.setText(status_text)
+        self.ai_status_indicator.setStyleSheet(f"QLabel {{ color: {color}; font-weight: bold; }}")
+    
+    def load_ai_data(self):
+        """Load pronunciation and definition data from Ollama AI"""
+        reference_text = self.reference_text.text().strip()
+        if not reference_text:
+            QMessageBox.warning(self, "No Text", "Please enter text to get AI assistance.")
+            return
+        
+        try:
+            # Update status
+            self.update_ai_status("connecting", "orange")
+            self.status_text.append(f"[{self.get_current_time()}] Requesting AI data for: '{reference_text}'")
+            
+            # Get language code
+            lang_code = self.config['language'].split('-')[0].lower()
+            
+            # Create AI requests
+            import subprocess
+            import json
+            
+            # Pronunciation request
+            pron_prompt = f"Provide the phonetic pronunciation for this {self.config['language_name']} phrase: '{reference_text}'. Respond with just the pronunciation guide."
+            
+            # Definition request  
+            def_prompt = f"Provide the definition and translation of this {self.config['language_name']} phrase: '{reference_text}'. Include grammatical information if relevant."
+            
+            # Run AI requests
+            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
+            
+            # Get pronunciation
+            pron_result = subprocess.run([
+                'ollama', 'run', selected_model, pron_prompt
+            ], capture_output=True, text=True, timeout=30)
+            
+            if pron_result.returncode == 0:
+                pronunciation = pron_result.stdout.strip()
+                self.pronunciation_text.setPlainText(pronunciation)
+                self.status_text.append(f"[{self.get_current_time()}] Pronunciation received from AI")
+            else:
+                self.pronunciation_text.setPlainText("Failed to get pronunciation from AI")
+                self.status_text.append(f"[{self.get_current_time()}] AI pronunciation request failed")
+            
+            # Get definition
+            def_result = subprocess.run([
+                'ollama', 'run', selected_model, def_prompt
+            ], capture_output=True, text=True, timeout=30)
+            
+            if def_result.returncode == 0:
+                definition = def_result.stdout.strip()
+                self.definition_text.setPlainText(definition)
+                self.status_text.append(f"[{self.get_current_time()}] Definition received from AI")
+            else:
+                self.definition_text.setPlainText("Failed to get definition from AI")
+                self.status_text.append(f"[{self.get_current_time()}] AI definition request failed")
+            
+            # Update status
+            if pron_result.returncode == 0 and def_result.returncode == 0:
+                self.update_ai_status("connected", "green")
+                self.status_text.append(f"[{self.get_current_time()}] AI data loading completed successfully")
+            else:
+                self.update_ai_status("error", "red")
+                self.status_text.append(f"[{self.get_current_time()}] AI data loading completed with errors")
+                
+        except subprocess.TimeoutExpired:
+            self.update_ai_status("error", "red")
+            self.status_text.append(f"[{self.get_current_time()}] AI request timed out")
+            QMessageBox.critical(self, "Timeout", "AI request timed out. Please check if Ollama is running.")
+        except FileNotFoundError:
+            self.update_ai_status("error", "red")
+            self.status_text.append(f"[{self.get_current_time()}] Ollama not found")
+            QMessageBox.critical(self, "Ollama Not Found", "Ollama is not installed or not in PATH. Please install Ollama first.")
+        except Exception as e:
+            self.update_ai_status("error", "red")
+            self.status_text.append(f"[{self.get_current_time()}] AI request error: {str(e)}")
+            QMessageBox.critical(self, "AI Error", f"Failed to get AI data: {str(e)}")
     
     def browse_file(self):
         filename, _ = QFileDialog.getOpenFileName(
