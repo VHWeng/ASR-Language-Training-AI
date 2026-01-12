@@ -965,11 +965,16 @@ class ASRApp(QMainWindow):
             import json
             
             # Enhanced pronunciation prompt for modern pronunciation
-            pron_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{reference_text}", provide:
-1. Modern phonetic pronunciation in IPA symbols
-2. Clear, accurate transcription
-Respond ONLY with the IPA pronunciation symbols, nothing else."""
-            
+            pron_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{reference_text}", provide the following information in a structured format:
+1.  **English:** The modern phonetic pronunciation in simple, readable English symbols.
+2.  **IPA:** The accurate International Phonetic Alphabet (IPA) transcription.
+3.  **Transcription:** A clear, accurate transcription of the phrase.
+Respond with each item clearly labeled. For example:
+English: [English pronunciation]
+IPA: [IPA transcription]
+Transcription: [transcription]
+"""
+
             # Enhanced definition prompt
             def_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{reference_text}", provide:
 1. Clear definition in English
@@ -999,19 +1004,31 @@ Be concise but informative."""
             
             # Process pronunciation response
             if pron_result.returncode == 0 and pron_result.stdout.strip():
-                ai_pronunciation = pron_result.stdout.strip()
-                # Clean up the response - remove any markdown or extra text
-                ai_pronunciation = self.clean_ai_response(ai_pronunciation)
+                ai_response = pron_result.stdout.strip()
+                self.status_text.append(f"[{self.get_current_time()}] 🤖 AI Raw Response:\n{ai_response}")
+
+                # Parse the structured response
+                english_pron = "N/A"
+                ipa_pron = "N/A"
                 
+                for line in ai_response.split('\n'):
+                    if line.lower().startswith("english:"):
+                        english_pron = self.clean_ai_response(line.split(":", 1)[1])
+                    elif line.lower().startswith("ipa:"):
+                        ipa_pron = self.clean_ai_response(line.split(":", 1)[1])
+
+                self.status_text.append(f"[{self.get_current_time()}] parsed English: {english_pron}")
+                self.status_text.append(f"[{self.get_current_time()}] parsed IPA: {ipa_pron}")
+
                 # Combine with current English text in proper format
                 english_text = self.reference_text.text().strip()
                 if english_text:
-                    combined_display = f"English: {english_text}\nIPA:     {ai_pronunciation}"
+                    combined_display = f"English: {english_pron}\nIPA:     {ipa_pron}"
                     self.pronunciation_text.setPlainText(combined_display)
-                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded: {ai_pronunciation}")
+                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded.")
                 else:
-                    self.pronunciation_text.setPlainText(f"IPA: {ai_pronunciation}")
-                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation: {ai_pronunciation}")
+                    self.pronunciation_text.setPlainText(f"IPA: {ipa_pron}")
+                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded.")
             else:
                 # Fall back to local IPA conversion if AI fails
                 self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI pronunciation failed, using local conversion")
