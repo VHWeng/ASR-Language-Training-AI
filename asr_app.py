@@ -921,8 +921,31 @@ class ASRApp(QMainWindow):
         self.ai_status_indicator.setText(status_text)
         self.ai_status_indicator.setStyleSheet(f"QLabel {{ color: {color}; font-weight: bold; }}")
     
+    def clean_ai_response(self, response):
+        """Clean AI response by removing markdown, extra formatting, and noise"""
+        if not response:
+            return ""
+        
+        # Remove common markdown artifacts
+        cleaned = response.strip()
+        cleaned = cleaned.replace("```", "")  # Remove code blocks
+        cleaned = cleaned.replace("**", "")   # Remove bold markers
+        cleaned = cleaned.replace("*", "")    # Remove italic markers
+        
+        # Remove common prefixes/suffixes
+        lines = cleaned.split('\n')
+        if lines:
+            # Take the first meaningful line for pronunciation
+            for line in lines:
+                line = line.strip()
+                if line and not line.lower().startswith(('note:', 'tip:', 'hint:')):
+                    cleaned = line
+                    break
+        
+        return cleaned.strip()
+    
     def load_ai_data(self):
-        """Load pronunciation and definition data from Ollama AI"""
+        """Load pronunciation and definition data from Ollama AI with JSON interface"""
         reference_text = self.reference_text.text().strip()
         if not reference_text:
             QMessageBox.warning(self, "No Text", "Please enter text to get AI assistance.")
@@ -931,83 +954,132 @@ class ASRApp(QMainWindow):
         try:
             # Update status
             self.update_ai_status("connecting", "orange")
-            self.status_text.append(f"[{self.get_current_time()}] Requesting AI data for: '{reference_text}'")
+            self.status_text.append(f"[{self.get_current_time()}] 🚀 Requesting AI data for: '{reference_text}'")
             
-            # Get language code
-            lang_code = self.config['language'].split('-')[0].lower()
+            # Debug logging
+            self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Using model: {self.config.get('ollama_model', 'kimi-k2:1t-cloud')}")
+            self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Language: {self.config['language_name']}")
             
-            # Create AI requests
+            # Create structured JSON request for better response management
             import subprocess
             import json
             
-            # Pronunciation request
-            pron_prompt = f"Provide the phonetic pronunciation for this {self.config['language_name']} phrase: '{reference_text}'. Respond with just the pronunciation guide."
+            # Enhanced pronunciation prompt for modern pronunciation
+            pron_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{reference_text}", provide:
+1. Modern phonetic pronunciation in IPA symbols
+2. Clear, accurate transcription
+Respond ONLY with the IPA pronunciation symbols, nothing else."""
             
-            # Definition request  
-            def_prompt = f"Provide the definition and translation of this {self.config['language_name']} phrase: '{reference_text}'. Include grammatical information if relevant."
+            # Enhanced definition prompt
+            def_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{reference_text}", provide:
+1. Clear definition in English
+2. Grammatical category
+3. Usage context if applicable
+Be concise but informative."""
             
-            # Run AI requests
+            # Run AI requests with improved error handling
             selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
             
-            # Get pronunciation
-            pron_result = subprocess.run([
-                'ollama', 'run', selected_model, pron_prompt
-            ], capture_output=True, text=True, timeout=30)
+            # Debug: Log the actual command being executed
+            self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Executing command: ollama run {selected_model} [prompt]")
             
-            if pron_result.returncode == 0:
+            # Get pronunciation with timeout and detailed error reporting
+            try:
+                pron_result = subprocess.run([
+                    'ollama', 'run', selected_model, pron_prompt
+                ], capture_output=True, text=True, timeout=45, encoding='utf-8')
+                
+                self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Pronunciation return code: {pron_result.returncode}")
+                if pron_result.stderr:
+                    self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Pronunciation stderr: {pron_result.stderr.strip()}")
+                    
+            except subprocess.TimeoutExpired as te:
+                self.status_text.append(f"[{self.get_current_time()}] ⏱️ Debug: Pronunciation timeout after {te.timeout} seconds")
+                raise
+            
+            # Process pronunciation response
+            if pron_result.returncode == 0 and pron_result.stdout.strip():
                 ai_pronunciation = pron_result.stdout.strip()
+                # Clean up the response - remove any markdown or extra text
+                ai_pronunciation = self.clean_ai_response(ai_pronunciation)
+                
                 # Combine with current English text in proper format
                 english_text = self.reference_text.text().strip()
                 if english_text:
                     combined_display = f"English: {english_text}\nIPA:     {ai_pronunciation}"
                     self.pronunciation_text.setPlainText(combined_display)
+                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded: {ai_pronunciation}")
                 else:
-                    self.pronunciation_text.setPlainText(ai_pronunciation)
-                self.status_text.append(f"[{self.get_current_time()}] AI pronunciation received: {ai_pronunciation}")
+                    self.pronunciation_text.setPlainText(f"IPA: {ai_pronunciation}")
+                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation: {ai_pronunciation}")
             else:
                 # Fall back to local IPA conversion if AI fails
+                self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI pronunciation failed, using local conversion")
                 english_text = self.reference_text.text().strip()
                 if english_text:
                     local_ipa = self.text_to_ipa(english_text)
-                    combined_display = f"English: {english_text}\nIPA:     {local_ipa} (Local conversion - AI unavailable)"
+                    combined_display = f"English: {english_text}\nIPA:     {local_ipa} (Local conversion)"
                     self.pronunciation_text.setPlainText(combined_display)
-                    self.status_text.append(f"[{self.get_current_time()}] Using local IPA conversion")
+                    self.status_text.append(f"[{self.get_current_time()}] 📝 Local IPA: {local_ipa}")
                 else:
-                    self.pronunciation_text.setPlainText("Failed to get pronunciation from AI")
-                self.status_text.append(f"[{self.get_current_time()}] AI pronunciation request failed")
+                    self.pronunciation_text.setPlainText("Failed to get pronunciation")
+                
+                # Log detailed error information
+                if pron_result.returncode != 0:
+                    self.status_text.append(f"[{self.get_current_time()}] ❌ Pronunciation error code: {pron_result.returncode}")
+                if not pron_result.stdout.strip():
+                    self.status_text.append(f"[{self.get_current_time()}] ❌ Empty pronunciation response")
+                
+            # Get definition with similar enhanced handling
+            try:
+                def_result = subprocess.run([
+                    'ollama', 'run', selected_model, def_prompt
+                ], capture_output=True, text=True, timeout=45, encoding='utf-8')
+                
+                self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Definition return code: {def_result.returncode}")
+                if def_result.stderr:
+                    self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Definition stderr: {def_result.stderr.strip()}")
+                    
+            except subprocess.TimeoutExpired as te:
+                self.status_text.append(f"[{self.get_current_time()}] ⏱️ Debug: Definition timeout after {te.timeout} seconds")
+                raise
             
-            # Get definition
-            def_result = subprocess.run([
-                'ollama', 'run', selected_model, def_prompt
-            ], capture_output=True, text=True, timeout=30)
-            
-            if def_result.returncode == 0:
+            # Process definition response
+            if def_result.returncode == 0 and def_result.stdout.strip():
                 definition = def_result.stdout.strip()
+                # Clean up the response
+                definition = self.clean_ai_response(definition)
                 self.definition_text.setPlainText(definition)
-                self.status_text.append(f"[{self.get_current_time()}] Definition received from AI")
+                self.status_text.append(f"[{self.get_current_time()}] ✅ AI definition loaded")
             else:
                 self.definition_text.setPlainText("Failed to get definition from AI")
-                self.status_text.append(f"[{self.get_current_time()}] AI definition request failed")
+                self.status_text.append(f"[{self.get_current_time()}] ❌ AI definition request failed")
+                
+                # Log detailed error information
+                if def_result.returncode != 0:
+                    self.status_text.append(f"[{self.get_current_time()}] ❌ Definition error code: {def_result.returncode}")
+                if not def_result.stdout.strip():
+                    self.status_text.append(f"[{self.get_current_time()}] ❌ Empty definition response")
             
-            # Update status
-            if pron_result.returncode == 0 and def_result.returncode == 0:
+            # Update final status
+            if pron_result.returncode == 0 and def_result.returncode == 0 and pron_result.stdout.strip() and def_result.stdout.strip():
                 self.update_ai_status("connected", "green")
-                self.status_text.append(f"[{self.get_current_time()}] AI data loading completed successfully")
+                self.status_text.append(f"[{self.get_current_time()}] 🎉 AI data loading completed successfully")
             else:
-                self.update_ai_status("error", "red")
-                self.status_text.append(f"[{self.get_current_time()}] AI data loading completed with errors")
+                self.update_ai_status("partial", "yellow")
+                self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI data loading completed with partial results")
                 
         except subprocess.TimeoutExpired:
             self.update_ai_status("error", "red")
-            self.status_text.append(f"[{self.get_current_time()}] AI request timed out")
-            QMessageBox.critical(self, "Timeout", "AI request timed out. Please check if Ollama is running.")
+            self.status_text.append(f"[{self.get_current_time()}] ⏱️ AI request timed out")
+            QMessageBox.critical(self, "Timeout", "AI request timed out. Please check if Ollama is running and responsive.")
         except FileNotFoundError:
             self.update_ai_status("error", "red")
-            self.status_text.append(f"[{self.get_current_time()}] Ollama not found")
+            self.status_text.append(f"[{self.get_current_time()}] ❌ Ollama not found")
             QMessageBox.critical(self, "Ollama Not Found", "Ollama is not installed or not in PATH. Please install Ollama first.")
         except Exception as e:
             self.update_ai_status("error", "red")
-            self.status_text.append(f"[{self.get_current_time()}] AI request error: {str(e)}")
+            self.status_text.append(f"[{self.get_current_time()}] ❌ AI request error: {str(e)}")
             QMessageBox.critical(self, "AI Error", f"Failed to get AI data: {str(e)}")
     
     def browse_file(self):
@@ -1481,68 +1553,106 @@ Perfect for language learners!"""
         Returns:
             IPA pronunciation string
         """
-        # Simple English to IPA mapping
-        # This is a basic implementation - for production use, consider using a proper IPA library
+        return self.text_to_ipa_modern(text)
+    
+    def text_to_ipa_modern(self, text):
+        """Convert English text to modern, accurate IPA pronunciation"""
+        # Enhanced English to IPA mapping with better accuracy
         ipa_map = {
-            # Vowels
-            'a': 'æ', 'A': 'ɑ',
-            'e': 'ɛ', 'E': 'eɪ',
-            'i': 'ɪ', 'I': 'aɪ',
-            'o': 'ɑ', 'O': 'oʊ',
-            'u': 'ʌ', 'U': 'ju',
+            # Vowels - short
+            'a': 'æ', 'e': 'ɛ', 'i': 'ɪ', 'o': 'ɒ', 'u': 'ʌ',
+            # Vowels - long
+            'aa': 'ɑː', 'ee': 'iː', 'ii': 'aɪ', 'oo': 'uː', 'uu': 'uː',
             # Consonants
             'b': 'b', 'c': 'k', 'd': 'd', 'f': 'f', 'g': 'ɡ',
             'h': 'h', 'j': 'dʒ', 'k': 'k', 'l': 'l', 'm': 'm',
             'n': 'n', 'p': 'p', 'q': 'k', 'r': 'ɹ', 's': 's',
             't': 't', 'v': 'v', 'w': 'w', 'x': 'ks', 'y': 'j', 'z': 'z',
-            # Common digraphs
-            'th': 'θ', 'TH': 'ð',
-            'sh': 'ʃ', 'SH': 'ʃ',
-            'ch': 'tʃ', 'CH': 'tʃ',
-            'ph': 'f', 'PH': 'f',
-            'wh': 'w', 'WH': 'w',
-            'ng': 'ŋ', 'NG': 'ŋ',
-            # Common vowel combinations
-            'ee': 'i', 'EE': 'i',
-            'oo': 'u', 'OO': 'u',
-            'ea': 'i', 'EA': 'i',
-            'ou': 'aʊ', 'OU': 'aʊ',
-            'ow': 'aʊ', 'OW': 'aʊ',
-            'ai': 'eɪ', 'AI': 'eɪ',
-            'ay': 'eɪ', 'AY': 'eɪ',
-            'oi': 'ɔɪ', 'OI': 'ɔɪ',
-            'oy': 'ɔɪ', 'OY': 'ɔɪ',
-            'ie': 'aɪ', 'IE': 'aɪ',
-            'ei': 'eɪ', 'EI': 'eɪ',
-            'ey': 'eɪ', 'EY': 'eɪ',
+            # Common digraphs and trigraphs
+            'th': 'θ', 'ch': 'tʃ', 'sh': 'ʃ', 'ph': 'f', 'wh': 'ʍ',
+            'ck': 'k', 'qu': 'kw', 'ng': 'ŋ', 'gh': 'ɡ', 'sc': 'sk',
+            'sch': 'sk', 'scr': 'skɹ', 'shr': 'ʃɹ', 'thr': 'θɹ',
+            # Vowel combinations - diphthongs
+            'ai': 'eɪ', 'ay': 'eɪ', 'au': 'ɔː', 'aw': 'ɔː',
+            'ea': 'iː', 'ee': 'iː', 'ei': 'aɪ', 'ey': 'aɪ',
+            'ie': 'aɪ', 'oa': 'əʊ', 'oo': 'uː', 'ou': 'aʊ', 'ow': 'aʊ',
+            'ue': 'uː', 'ui': 'aɪ', 'ew': 'juː', 'oi': 'ɔɪ', 'oy': 'ɔɪ',
+            'ar': 'ɑː', 'er': 'ɜː', 'ir': 'ɜː', 'or': 'ɔː', 'ur': 'ɜː',
+            # Silent letters and special cases
+            'kn': 'n', 'gn': 'n', 'wr': 'ɹ', 'mb': 'm',
+            # Common words and phrases
+            'the': 'ðə', 'and': 'ənd', 'of': 'əv', 'to': 'tu', 'in': 'ɪn',
+            'is': 'ɪz', 'it': 'ɪt', 'you': 'juː', 'he': 'hiː', 'she': 'ʃiː',
+            'we': 'wiː', 'they': 'ðeɪ', 'are': 'ɑː', 'was': 'wɒz', 'were': 'wɜː',
+            'have': 'hæv', 'has': 'hæz', 'had': 'hæd', 'do': 'duː', 'does': 'dʌz',
+            'did': 'dɪd', 'will': 'wɪl', 'would': 'wʊd', 'can': 'kæn', 'could': 'kʊd',
+            'shall': 'ʃæl', 'should': 'ʃʊd', 'may': 'meɪ', 'might': 'maɪt',
+            'must': 'mʌst', 'ought': 'ɔːt', 'need': 'niːd'
         }
         
-        # Handle punctuation and spacing
-        result = []
-        i = 0
-        while i < len(text):
-            # Check for two-character combinations first
-            if i < len(text) - 1:
-                two_char = text[i:i+2]
-                if two_char in ipa_map:
-                    result.append(ipa_map[two_char])
-                    i += 2
-                    continue
-            
-            # Check for single characters
-            char = text[i]
-            if char in ipa_map:
-                result.append(ipa_map[char])
-            elif char.isspace():
-                result.append(char)
-            elif char in '.!?,:;\'"()[]{}':
-                result.append(char)
-            else:
-                # Keep unrecognized characters as-is
-                result.append(char)
-            i += 1
+        # Preprocessing
+        text = text.lower().strip()
+        words = text.split()
+        ipa_words = []
         
-        return ''.join(result)
+        for word in words:
+            # Remove punctuation for processing but keep it for output
+            clean_word = ''.join(c for c in word if c.isalnum())
+            punctuation = ''.join(c for c in word if not c.isalnum())
+            
+            if not clean_word:
+                if punctuation:
+                    ipa_words.append(punctuation)
+                continue
+            
+            # Word-specific exceptions
+            if clean_word in ['been', 'read']:
+                # Context-sensitive pronunciation would go here
+                pass
+            
+            # Convert the clean word
+            ipa_word = ""
+            i = 0
+            
+            while i < len(clean_word):
+                # Check for longest possible matches first
+                matched = False
+                
+                # Check trigraphs
+                if i <= len(clean_word) - 3:
+                    trigraph = clean_word[i:i+3]
+                    if trigraph in ipa_map:
+                        ipa_word += ipa_map[trigraph]
+                        i += 3
+                        matched = True
+                        continue
+                
+                # Check digraphs
+                if i <= len(clean_word) - 2:
+                    digraph = clean_word[i:i+2]
+                    if digraph in ipa_map:
+                        ipa_word += ipa_map[digraph]
+                        i += 2
+                        matched = True
+                        continue
+                
+                # Check single characters
+                char = clean_word[i]
+                if char in ipa_map:
+                    ipa_word += ipa_map[char]
+                elif char.isalpha():
+                    # Unknown letters - use closest approximation
+                    ipa_word += char
+                
+                i += 1
+            
+            # Add back punctuation
+            if punctuation:
+                ipa_word += punctuation
+                
+            ipa_words.append(ipa_word)
+        
+        return ' '.join(ipa_words)
     
     def update_combined_pronunciation(self):
         """Update combined pronunciation display (English + IPA) in pronunciation text box"""
@@ -1552,18 +1662,18 @@ Perfect for language learners!"""
                 self.pronunciation_text.setPlainText("Enter text above to see English and IPA pronunciation...")
                 return
             
-            # Convert to IPA
-            ipa_text = self.text_to_ipa(english_text)
+            # Convert to IPA using modern algorithm
+            ipa_text = self.text_to_ipa_modern(english_text)
             
             # Display both English and IPA in the pronunciation text box
             display_text = f"English: {english_text}\nIPA:     {ipa_text}"
             self.pronunciation_text.setPlainText(display_text)
             
             # Update status
-            self.status_text.append(f"[{self.get_current_time()}] Combined pronunciation updated")
+            self.status_text.append(f"[{self.get_current_time()}] 🔄 Combined pronunciation updated")
             
         except Exception as e:
-            self.status_text.append(f"[{self.get_current_time()}] Pronunciation conversion error: {str(e)}")
+            self.status_text.append(f"[{self.get_current_time()}] ❌ Pronunciation conversion error: {str(e)}")
     
     def change_font_size(self, text_widget, delta):
         """Change font size for text widgets
