@@ -715,6 +715,10 @@ class ASRApp(QMainWindow):
         ref_layout.addWidget(QLabel("Reference Text:"))
         self.reference_text = QLineEdit()
         self.reference_text.setPlaceholderText("Enter the text you want to practice...")
+        # Set default font size to 14pt
+        ref_font = QFont()
+        ref_font.setPointSize(14)
+        self.reference_text.setFont(ref_font)
         self.reference_text.setEnabled(True)  # Default enabled
         self.reference_text.returnPressed.connect(self.load_ai_data)  # Enter key handler
         self.reference_text.textChanged.connect(self.update_combined_pronunciation)  # Connect to combined pronunciation update
@@ -819,7 +823,8 @@ class ASRApp(QMainWindow):
         
         # Image viewer (below definition)
         self.image_viewer = QLabel()
-        self.image_viewer.setMaximumHeight(200)
+        self.image_viewer.setMaximumHeight(300)
+        self.image_viewer.setMaximumWidth(800)  # Prevent horizontal shrinking
         self.image_viewer.setAlignment(Qt.AlignCenter)
         self.image_viewer.setText("No image loaded")
         self.image_viewer.setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;")
@@ -1626,11 +1631,21 @@ Respond with each clearly labeled."""
                     self.image_viewer.show()
                     return
             
-            # Scale image to fit viewer
+            # Scale image to fit viewer (use maximum dimensions to prevent shrinking)
             if not pixmap.isNull():
+                # Use maximum width/height to prevent cumulative shrinking
+                max_width = self.image_viewer.maximumWidth()
+                max_height = self.image_viewer.maximumHeight()
+                
+                # If maximum size is not set, use reasonable defaults
+                if max_width <= 0:
+                    max_width = 800  # Default maximum width
+                if max_height <= 0:
+                    max_height = 300  # Same as maximumHeight setting
+                
                 scaled_pixmap = pixmap.scaled(
-                    self.image_viewer.width() - 10,  # Leave margin
-                    self.image_viewer.height() - 10,
+                    max_width - 10,  # Leave margin
+                    max_height - 10,
                     Qt.KeepAspectRatio,
                     Qt.SmoothTransformation
                 )
