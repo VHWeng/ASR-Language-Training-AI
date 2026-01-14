@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QLineEdit, QMessageBox, QToolButton, QGroupBox,
                              QProgressBar, QSpinBox, QTabWidget)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QIcon, QFont, QColor, QTextCharFormat, QTextCursor
+from PyQt5.QtGui import QIcon, QFont, QColor, QTextCharFormat, QTextCursor, QPixmap
 import speech_recognition as sr
 import sounddevice as sd
 import soundfile as sf
@@ -29,6 +29,9 @@ import io
 from datetime import datetime
 import time
 import threading
+import csv
+import zipfile
+from pathlib import Path
 
 
 class ConfigDialog(QDialog):
@@ -172,6 +175,70 @@ class ConfigDialog(QDialog):
         ollama_group.setLayout(ollama_layout)
         layout.addWidget(ollama_group)
         
+        # Vocabulary File Configuration
+        vocab_config_group = QGroupBox("Vocabulary File Settings")
+        vocab_config_layout = QVBoxLayout()
+        
+        # Delimiter selection
+        delim_layout = QHBoxLayout()
+        self.delim_label = QLabel("Delimiter:")
+        self.delim_combo = QComboBox()
+        self.delimiters = ["|", ",", ";", "\t"]
+        self.delim_combo.addItems(self.delimiters)
+        self.delim_combo.setCurrentText("|")
+        delim_layout.addWidget(self.delim_label)
+        delim_layout.addWidget(self.delim_combo)
+        vocab_config_layout.addLayout(delim_layout)
+        
+        # Column mappings
+        col_mapping_layout = QGridLayout()
+        
+        # Reference text column
+        col_mapping_layout.addWidget(QLabel("Reference Text Column:"), 0, 0)
+        self.ref_col_spin = QSpinBox()
+        self.ref_col_spin.setRange(1, 20)
+        self.ref_col_spin.setValue(1)
+        col_mapping_layout.addWidget(self.ref_col_spin, 0, 1)
+        
+        # Definition column
+        col_mapping_layout.addWidget(QLabel("Definition Column:"), 1, 0)
+        self.def_col_spin = QSpinBox()
+        self.def_col_spin.setRange(1, 20)
+        self.def_col_spin.setValue(2)
+        col_mapping_layout.addWidget(self.def_col_spin, 1, 1)
+        
+        # English pronunciation column
+        col_mapping_layout.addWidget(QLabel("English Pronunciation Column:"), 2, 0)
+        self.eng_pron_col_spin = QSpinBox()
+        self.eng_pron_col_spin.setRange(1, 20)
+        self.eng_pron_col_spin.setValue(3)
+        col_mapping_layout.addWidget(self.eng_pron_col_spin, 2, 1)
+        
+        # IPA pronunciation column
+        col_mapping_layout.addWidget(QLabel("IPA Pronunciation Column:"), 3, 0)
+        self.ipa_col_spin = QSpinBox()
+        self.ipa_col_spin.setRange(1, 20)
+        self.ipa_col_spin.setValue(4)
+        col_mapping_layout.addWidget(self.ipa_col_spin, 3, 1)
+        
+        # Image description column
+        col_mapping_layout.addWidget(QLabel("Image Description Column:"), 4, 0)
+        self.img_desc_col_spin = QSpinBox()
+        self.img_desc_col_spin.setRange(1, 20)
+        self.img_desc_col_spin.setValue(5)
+        col_mapping_layout.addWidget(self.img_desc_col_spin, 4, 1)
+        
+        # Image filename column
+        col_mapping_layout.addWidget(QLabel("Image Filename Column:"), 5, 0)
+        self.img_file_col_spin = QSpinBox()
+        self.img_file_col_spin.setRange(1, 20)
+        self.img_file_col_spin.setValue(6)
+        col_mapping_layout.addWidget(self.img_file_col_spin, 5, 1)
+        
+        vocab_config_layout.addLayout(col_mapping_layout)
+        vocab_config_group.setLayout(vocab_config_layout)
+        layout.addWidget(vocab_config_group)
+        
         # Buttons
         btn_layout = QHBoxLayout()
         self.ok_btn = QPushButton("OK")
@@ -291,6 +358,17 @@ class ConfigDialog(QDialog):
         
         # Add Ollama configuration
         config['ollama_model'] = self.ollama_model_combo.currentText()
+        
+        # Add vocabulary configuration
+        config['vocab_delimiter'] = self.delim_combo.currentText()
+        config['vocab_columns'] = {
+            'reference': self.ref_col_spin.value(),
+            'definition': self.def_col_spin.value(),
+            'english_pronunciation': self.eng_pron_col_spin.value(),
+            'ipa_pronunciation': self.ipa_col_spin.value(),
+            'image_description': self.img_desc_col_spin.value(),
+            'image_filename': self.img_file_col_spin.value()
+        }
         
         return config
 
@@ -511,9 +589,25 @@ class ASRApp(QMainWindow):
             'sample_rate': 16000,
             'energy_threshold': 300,
             'pronunciation_threshold': 80,
-            'ollama_model': 'kimi-k2:1t-cloud'
+            'ollama_model': 'kimi-k2:1t-cloud',
+            'vocab_delimiter': '|',
+            'vocab_columns': {
+                'reference': 1,
+                'definition': 2,
+                'english_pronunciation': 3,
+                'ipa_pronunciation': 4,
+                'image_description': 5,
+                'image_filename': 6
+            }
         }
         self.pronunciation_data = None
+        
+        # Vocabulary file handling attributes
+        self.vocabulary_data = []
+        self.current_vocab_index = -1
+        self.vocab_file_path = None
+        self.image_directory = None
+        
         self.init_ui()
     
     def init_ui(self):
@@ -577,6 +671,44 @@ class ASRApp(QMainWindow):
         mode_layout.addWidget(self.ai_status_indicator)
         mode_layout.addStretch()
         pron_layout.addLayout(mode_layout)
+        
+        # Vocabulary file loading section
+        vocab_layout = QHBoxLayout()
+        vocab_layout.addWidget(QLabel("Vocabulary File:"))
+        
+        self.vocab_file_label = QLabel("No file loaded")
+        self.vocab_file_label.setMinimumWidth(150)
+        vocab_layout.addWidget(self.vocab_file_label)
+        
+        self.load_vocab_btn = QPushButton("📁 Load Vocabulary")
+        self.load_vocab_btn.clicked.connect(self.load_vocabulary_file)
+        self.load_vocab_btn.setToolTip("Load vocabulary from text, CSV, or ZIP file")
+        vocab_layout.addWidget(self.load_vocab_btn)
+        
+        # Enable Image checkbox
+        self.enable_image_cb = QCheckBox("Enable Image")
+        self.enable_image_cb.setChecked(False)
+        self.enable_image_cb.toggled.connect(self.toggle_image_display)
+        vocab_layout.addWidget(self.enable_image_cb)
+        
+        vocab_layout.addStretch()
+        pron_layout.addLayout(vocab_layout)
+        
+        # Navigation buttons (centered below definition)
+        nav_layout = QHBoxLayout()
+        nav_layout.addStretch()
+        
+        self.prev_vocab_btn = QPushButton("◀ Previous")
+        self.prev_vocab_btn.clicked.connect(self.previous_vocabulary)
+        self.prev_vocab_btn.setEnabled(False)
+        nav_layout.addWidget(self.prev_vocab_btn)
+        
+        self.next_vocab_btn = QPushButton("Next ▶")
+        self.next_vocab_btn.clicked.connect(self.next_vocabulary)
+        self.next_vocab_btn.setEnabled(False)
+        nav_layout.addWidget(self.next_vocab_btn)
+        
+        nav_layout.addStretch()
         
         # Reference text row
         ref_layout = QHBoxLayout()
@@ -681,6 +813,18 @@ class ASRApp(QMainWindow):
         def_font_layout.addStretch()
         pron_layout.addLayout(def_font_layout)
         pron_layout.addWidget(self.definition_text)
+        
+        # Add navigation buttons layout here
+        pron_layout.addLayout(nav_layout)
+        
+        # Image viewer (below definition)
+        self.image_viewer = QLabel()
+        self.image_viewer.setMaximumHeight(200)
+        self.image_viewer.setAlignment(Qt.AlignCenter)
+        self.image_viewer.setText("No image loaded")
+        self.image_viewer.setStyleSheet("border: 1px solid gray; background-color: #f0f0f0;")
+        self.image_viewer.hide()  # Hidden by default
+        pron_layout.addWidget(self.image_viewer)
         
         pron_group.setLayout(pron_layout)
         main_layout.addWidget(pron_group)
@@ -1098,6 +1242,342 @@ Be concise but informative."""
             self.update_ai_status("error", "red")
             self.status_text.append(f"[{self.get_current_time()}] ❌ AI request error: {str(e)}")
             QMessageBox.critical(self, "AI Error", f"Failed to get AI data: {str(e)}")
+    
+    def load_vocabulary_file(self):
+        """Load vocabulary from text, CSV, or ZIP file"""
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Select Vocabulary File", "", 
+            "Vocabulary Files (*.txt *.csv *.zip);;Text Files (*.txt);;CSV Files (*.csv);;ZIP Files (*.zip);;All Files (*)"
+        )
+        
+        if not filename:
+            return
+        
+        try:
+            self.status_text.append(f"[{self.get_current_time()}] 📁 Loading vocabulary file: {os.path.basename(filename)}")
+            
+            file_extension = Path(filename).suffix.lower()
+            
+            if file_extension == ".zip":
+                self.load_zip_vocabulary(filename)
+            elif file_extension in [".txt", ".csv"]:
+                self.load_csv_vocabulary(filename)
+            else:
+                QMessageBox.warning(self, "Unsupported Format", 
+                                  f"Unsupported file format: {file_extension}")
+                return
+            
+            # Update UI
+            self.vocab_file_label.setText(os.path.basename(filename))
+            self.vocab_file_path = filename
+            
+            # Enable navigation buttons if we have data
+            if self.vocabulary_data:
+                self.current_vocab_index = 0
+                self.prev_vocab_btn.setEnabled(False)
+                self.next_vocab_btn.setEnabled(len(self.vocabulary_data) > 1)
+                self.display_current_vocabulary()
+                self.status_text.append(f"[{self.get_current_time()}] ✅ Loaded {len(self.vocabulary_data)} vocabulary entries")
+            else:
+                self.current_vocab_index = -1
+                self.prev_vocab_btn.setEnabled(False)
+                self.next_vocab_btn.setEnabled(False)
+                self.status_text.append(f"[{self.get_current_time()}] ⚠️ No vocabulary entries found in file")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", f"Failed to load vocabulary file: {str(e)}")
+            self.status_text.append(f"[{self.get_current_time()}] ❌ Vocabulary load error: {str(e)}")
+    
+    def load_csv_vocabulary(self, filepath):
+        """Load vocabulary from CSV or text file"""
+        self.vocabulary_data = []
+        
+        delimiter = self.config['vocab_delimiter']
+        if delimiter == "\t":
+            delimiter = "\t"
+        
+        columns = self.config['vocab_columns']
+        
+        try:
+            with open(filepath, 'r', encoding='utf-8', newline='') as file:
+                # Detect if it's a CSV or tab-delimited file
+                sample = file.read(1024)
+                file.seek(0)
+                
+                if delimiter == ",":
+                    reader = csv.reader(file, delimiter=",")
+                elif delimiter == "|":
+                    reader = csv.reader(file, delimiter="|")
+                elif delimiter == ";":
+                    reader = csv.reader(file, delimiter=";")
+                else:  # tab
+                    reader = csv.reader(file, delimiter="\t")
+                
+                # Skip header row if it looks like a header
+                header_skipped = False
+                for row_num, row in enumerate(reader, 1):
+                    if not row or all(not cell.strip() for cell in row):
+                        continue
+                    
+                    # Check if this looks like a header row (first row with text-like content)
+                    if not header_skipped and row_num == 1:
+                        # Heuristic: if most cells look like column names, skip as header
+                        text_cells = [cell.strip().lower() for cell in row if cell.strip()]
+                        common_header_words = ['word', 'phrase', 'definition', 'pronunciation', 'image', 'desc', 'file']
+                        header_score = sum(1 for cell in text_cells if any(header_word in cell for header_word in common_header_words))
+                        if header_score >= 2 or len(text_cells) <= 3:  # Likely a header
+                            header_skipped = True
+                            continue
+                    
+                    # Extract data based on column configuration
+                    vocab_entry = {
+                        'reference': '',
+                        'definition': '',
+                        'english_pronunciation': '',
+                        'ipa_pronunciation': '',
+                        'image_description': '',
+                        'image_filename': '',
+                        'row_number': row_num
+                    }
+                    
+                    # Get data from configured columns
+                    if columns['reference'] <= len(row):
+                        vocab_entry['reference'] = row[columns['reference'] - 1].strip()
+                    
+                    if columns['definition'] <= len(row):
+                        vocab_entry['definition'] = row[columns['definition'] - 1].strip()
+                    
+                    if columns['english_pronunciation'] <= len(row):
+                        vocab_entry['english_pronunciation'] = row[columns['english_pronunciation'] - 1].strip()
+                    
+                    if columns['ipa_pronunciation'] <= len(row):
+                        vocab_entry['ipa_pronunciation'] = row[columns['ipa_pronunciation'] - 1].strip()
+                    
+                    if columns['image_description'] <= len(row):
+                        vocab_entry['image_description'] = row[columns['image_description'] - 1].strip()
+                    
+                    if columns['image_filename'] <= len(row):
+                        vocab_entry['image_filename'] = row[columns['image_filename'] - 1].strip()
+                    
+                    # Only add entries that have reference text
+                    if vocab_entry['reference']:
+                        self.vocabulary_data.append(vocab_entry)
+                        
+        except Exception as e:
+            raise Exception(f"Error reading CSV file: {str(e)}")
+    
+    def load_zip_vocabulary(self, filepath):
+        """Load vocabulary from ZIP file"""
+        self.vocabulary_data = []
+        
+        try:
+            with zipfile.ZipFile(filepath, 'r') as zip_file:
+                # Look for CSV files in the ZIP
+                csv_files = [f for f in zip_file.namelist() if f.lower().endswith('.csv')]
+                
+                if not csv_files:
+                    raise Exception("No CSV files found in ZIP archive")
+                
+                # Use the first CSV file found
+                csv_filename = csv_files[0]
+                self.status_text.append(f"[{self.get_current_time()}] 📄 Found CSV file in ZIP: {csv_filename}")
+                
+                # Extract and load the CSV
+                with zip_file.open(csv_filename) as csv_file_obj:
+                    # Read the CSV content
+                    content = csv_file_obj.read().decode('utf-8')
+                    
+                    # Create temporary file for processing
+                    temp_csv = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8')
+                    temp_csv.write(content)
+                    temp_csv.close()
+                    
+                    try:
+                        self.load_csv_vocabulary(temp_csv.name)
+                    finally:
+                        os.unlink(temp_csv.name)
+                
+                # Look for image directory
+                image_dirs = [f for f in zip_file.namelist() if f.lower().endswith('/') and 'image' in f.lower()]
+                if image_dirs:
+                    self.image_directory = image_dirs[0]
+                    self.status_text.append(f"[{self.get_current_time()}] 📁 Found image directory in ZIP: {self.image_directory}")
+                    
+        except Exception as e:
+            raise Exception(f"Error reading ZIP file: {str(e)}")
+    
+    def display_current_vocabulary(self):
+        """Display the current vocabulary entry"""
+        if not self.vocabulary_data or self.current_vocab_index < 0:
+            return
+        
+        entry = self.vocabulary_data[self.current_vocab_index]
+        
+        # Update reference text
+        self.reference_text.setText(entry['reference'])
+        
+        # Update definition
+        definition = entry.get('definition', '')
+        if not definition and self.config.get('ollama_model'):
+            # Use AI to generate definition if missing
+            definition = self.generate_definition_with_ai(entry['reference'])
+        self.definition_text.setPlainText(definition or "No definition available")
+        
+        # Update pronunciation
+        english_pron = entry.get('english_pronunciation', '')
+        ipa_pron = entry.get('ipa_pronunciation', '')
+        
+        if not english_pron or not ipa_pron:
+            # Use AI to generate pronunciation if missing
+            ai_pron = self.generate_pronunciation_with_ai(entry['reference'])
+            if ai_pron:
+                english_pron = english_pron or ai_pron.get('english', '')
+                ipa_pron = ipa_pron or ai_pron.get('ipa', '')
+        
+        if english_pron or ipa_pron:
+            combined_pron = f"English: {english_pron or 'N/A'}\nIPA:     {ipa_pron or 'N/A'}"
+            self.pronunciation_text.setPlainText(combined_pron)
+        else:
+            # Fallback to local IPA conversion
+            local_ipa = self.text_to_ipa_modern(entry['reference'])
+            combined_pron = f"English: {entry['reference']}\nIPA:     {local_ipa} (Local conversion)"
+            self.pronunciation_text.setPlainText(combined_pron)
+        
+        # Handle image
+        if self.enable_image_cb.isChecked() and entry.get('image_filename', ''):
+            self.load_vocabulary_image(entry.get('image_filename', ''), entry.get('image_description', ''))
+        else:
+            self.image_viewer.hide()
+        
+        # Update navigation button states
+        self.prev_vocab_btn.setEnabled(self.current_vocab_index > 0)
+        self.next_vocab_btn.setEnabled(self.current_vocab_index < len(self.vocabulary_data) - 1)
+        
+        self.status_text.append(f"[{self.get_current_time()}] 📚 Displaying vocabulary entry {self.current_vocab_index + 1}/{len(self.vocabulary_data)}: {entry['reference']}")
+    
+    def previous_vocabulary(self):
+        """Navigate to previous vocabulary entry"""
+        if self.current_vocab_index > 0:
+            self.current_vocab_index -= 1
+            self.display_current_vocabulary()
+    
+    def next_vocabulary(self):
+        """Navigate to next vocabulary entry"""
+        if self.current_vocab_index < len(self.vocabulary_data) - 1:
+            self.current_vocab_index += 1
+            self.display_current_vocabulary()
+    
+    def generate_definition_with_ai(self, text):
+        """Generate definition using AI"""
+        try:
+            import subprocess
+            
+            prompt = f"""Provide a clear definition of "{text}" in English. Include grammatical category if applicable."""
+            
+            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
+            result = subprocess.run([
+                'ollama', 'run', selected_model, prompt
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                return self.clean_ai_response(result.stdout.strip())
+            
+        except Exception as e:
+            self.status_text.append(f"[{self.get_current_time()}] ❌ AI definition generation failed: {str(e)}")
+        
+        return ""
+    
+    def generate_pronunciation_with_ai(self, text):
+        """Generate pronunciation using AI"""
+        try:
+            import subprocess
+            
+            prompt = f"""For the English phrase "{text}", provide:
+1. English pronunciation symbols
+2. IPA transcription
+Respond with each clearly labeled."""
+            
+            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
+            result = subprocess.run([
+                'ollama', 'run', selected_model, prompt
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                ai_response = result.stdout.strip()
+                english_pron = ""
+                ipa_pron = ""
+                
+                for line in ai_response.split('\n'):
+                    if line.lower().startswith("english:"):
+                        english_pron = self.clean_ai_response(line.split(":", 1)[1])
+                    elif line.lower().startswith("ipa:"):
+                        ipa_pron = self.clean_ai_response(line.split(":", 1)[1])
+                
+                return {'english': english_pron, 'ipa': ipa_pron}
+            
+        except Exception as e:
+            self.status_text.append(f"[{self.get_current_time()}] ❌ AI pronunciation generation failed: {str(e)}")
+        
+        return None
+    
+    def load_vocabulary_image(self, image_filename, image_description=""):
+        """Load and display vocabulary image"""
+        try:
+            # Check if we're loading from ZIP or filesystem
+            if self.vocab_file_path and self.vocab_file_path.endswith('.zip') and self.image_directory:
+                # Load from ZIP file
+                with zipfile.ZipFile(self.vocab_file_path, 'r') as zip_file:
+                    image_path = f"{self.image_directory}{image_filename}"
+                    if image_path in zip_file.namelist():
+                        image_data = zip_file.read(image_path)
+                        pixmap = QPixmap()
+                        pixmap.loadFromData(image_data)
+                    else:
+                        self.image_viewer.setText("Image not found in ZIP")
+                        self.image_viewer.show()
+                        return
+            else:
+                # Load from filesystem
+                image_path = Path(self.vocab_file_path).parent / image_filename
+                if image_path.exists():
+                    pixmap = QPixmap(str(image_path))
+                else:
+                    self.image_viewer.setText("Image file not found")
+                    self.image_viewer.show()
+                    return
+            
+            # Scale image to fit viewer
+            if not pixmap.isNull():
+                scaled_pixmap = pixmap.scaled(
+                    self.image_viewer.width() - 10,  # Leave margin
+                    self.image_viewer.height() - 10,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+                self.image_viewer.setPixmap(scaled_pixmap)
+                if image_description:
+                    self.image_viewer.setToolTip(image_description)
+                self.image_viewer.show()
+            else:
+                self.image_viewer.setText("Invalid image format")
+                self.image_viewer.show()
+                
+        except Exception as e:
+            self.status_text.append(f"[{self.get_current_time()}] ❌ Image loading error: {str(e)}")
+            self.image_viewer.setText("Error loading image")
+            self.image_viewer.show()
+    
+    def toggle_image_display(self, enabled):
+        """Toggle image viewer visibility"""
+        if enabled and self.vocabulary_data and self.current_vocab_index >= 0:
+            entry = self.vocabulary_data[self.current_vocab_index]
+            if entry.get('image_filename', ''):
+                self.load_vocabulary_image(entry.get('image_filename', ''), entry.get('image_description', ''))
+            else:
+                self.image_viewer.setText("No image available for current entry")
+                self.image_viewer.show()
+        else:
+            self.image_viewer.hide()
     
     def browse_file(self):
         filename, _ = QFileDialog.getOpenFileName(
