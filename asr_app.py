@@ -1359,6 +1359,9 @@ Be concise but informative."""
                     if columns['image_filename'] <= len(row):
                         vocab_entry['image_filename'] = row[columns['image_filename'] - 1].strip()
                     
+                    if columns['ipa_pronunciation'] <= len(row):
+                        vocab_entry['ipa_pronunciation'] = row[columns['ipa_pronunciation'] - 1].strip()
+                    
                     # Only add entries that have reference text
                     if vocab_entry['reference']:
                         self.vocabulary_data.append(vocab_entry)
@@ -1397,11 +1400,46 @@ Be concise but informative."""
                     finally:
                         os.unlink(temp_csv.name)
                 
-                # Look for image directory
-                image_dirs = [f for f in zip_file.namelist() if f.lower().endswith('/') and 'image' in f.lower()]
-                if image_dirs:
-                    self.image_directory = image_dirs[0]
-                    self.status_text.append(f"[{self.get_current_time()}] 📁 Found image directory in ZIP: {self.image_directory}")
+                # Look for "images" directory specifically
+                all_entries = zip_file.namelist()
+                
+                # Priority 1: Look for exact "images/" directory
+                images_dir = "images/"  # Exact match for the directory
+                if images_dir in all_entries:
+                    self.image_directory = images_dir
+                    self.status_text.append(f"[{self.get_current_time()}] 📁 Found primary images directory: {self.image_directory}")
+                else:
+                    # Priority 2: Look for variations of image directories
+                    image_dirs = [f for f in all_entries if f.lower().endswith('/') and ('image' in f.lower() or 'img' in f.lower())]
+                    
+                    # Also look for directories containing image files
+                    if not image_dirs:
+                        # Check if there are image files in root or subdirectories
+                        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']
+                        image_files = [f for f in all_entries 
+                                     if not f.endswith('/') and any(f.lower().endswith(ext) for ext in image_extensions)]
+                        
+                        if image_files:
+                            # Get the directories containing images
+                            dirs_with_images = set()
+                            for img_file in image_files:
+                                parts = img_file.split('/')
+                                if len(parts) > 1:
+                                    # Add the directory path
+                                    dir_path = '/'.join(parts[:-1]) + '/'
+                                    dirs_with_images.add(dir_path)
+                            
+                            if dirs_with_images:
+                                image_dirs = list(dirs_with_images)
+                                self.status_text.append(f"[{self.get_current_time()}] 📁 Found alternative image directories: {image_dirs}")
+                            else:
+                                self.status_text.append(f"[{self.get_current_time()}] 📁 Found {len(image_files)} image files in ZIP root")
+                    
+                    if image_dirs:
+                        self.image_directory = image_dirs[0]  # Use first found directory
+                        self.status_text.append(f"[{self.get_current_time()}] 📁 Selected image directory: {self.image_directory}")
+                    else:
+                        self.status_text.append(f"[{self.get_current_time()}] ℹ️ No dedicated image directory found")
                     
         except Exception as e:
             raise Exception(f"Error reading ZIP file: {str(e)}")
@@ -1523,17 +1561,59 @@ Respond with each clearly labeled."""
     def load_vocabulary_image(self, image_filename, image_description=""):
         """Load and display vocabulary image"""
         try:
+            # Handle missing file extensions
+            base_filename = Path(image_filename).stem
+            file_extension = Path(image_filename).suffix.lower()
+            
+            # If no extension provided, try common image extensions
+            if not file_extension:
+                possible_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']
+                self.status_text.append(f"[{self.get_current_time()}] ⚠️ No extension found for {image_filename}, will try common extensions")
+            else:
+                possible_extensions = [file_extension]
+            
             # Check if we're loading from ZIP or filesystem
-            if self.vocab_file_path and self.vocab_file_path.endswith('.zip') and self.image_directory:
+            if self.vocab_file_path and self.vocab_file_path.endswith('.zip'):
                 # Load from ZIP file
                 with zipfile.ZipFile(self.vocab_file_path, 'r') as zip_file:
-                    image_path = f"{self.image_directory}{image_filename}"
-                    if image_path in zip_file.namelist():
-                        image_data = zip_file.read(image_path)
+                    # First, try to find the image in the "images" subdirectory
+                    images_dir_path = "images/"
+                    
+                    # Try each possible extension
+                    found_image_path = None
+                    for ext in possible_extensions:
+                        target_filename = f"{base_filename}{ext}"
+                        image_path_in_images = f"{images_dir_path}{target_filename}"
+                        
+                        if image_path_in_images in zip_file.namelist():
+                            found_image_path = image_path_in_images
+                            self.status_text.append(f"[{self.get_current_time()}] 🖼️ Loading image from images/ directory: {found_image_path}")
+                            break
+                    
+                    # If not found in images/ directory, search entire ZIP
+                    if not found_image_path:
+                        self.status_text.append(f"[{self.get_current_time()}] ⚠️ Image not found in images/ directory, searching entire ZIP...")
+                        image_files = [f for f in zip_file.namelist() 
+                                     if not f.endswith('/') and '.' in f.split('/')[-1]]
+                        
+                        # Try to find the image by base filename with any extension
+                        for ext in possible_extensions:
+                            target_filename_lower = f"{base_filename}{ext}".lower()
+                            for img_path in image_files:
+                                if Path(img_path).name.lower() == target_filename_lower:
+                                    found_image_path = img_path
+                                    self.status_text.append(f"[{self.get_current_time()}] 🖼️ Found image in ZIP (alternative location): {found_image_path}")
+                                    break
+                            if found_image_path:
+                                break
+                    
+                    if found_image_path and found_image_path in zip_file.namelist():
+                        image_data = zip_file.read(found_image_path)
                         pixmap = QPixmap()
                         pixmap.loadFromData(image_data)
                     else:
-                        self.image_viewer.setText("Image not found in ZIP")
+                        self.status_text.append(f"[{self.get_current_time()}] ❌ Image not found in ZIP: {image_filename}")
+                        self.image_viewer.setText(f"Image not found: {image_filename}")
                         self.image_viewer.show()
                         return
             else:
