@@ -15,7 +15,8 @@ An advanced speech recognition application with pronunciation training capabilit
 - Load vocabulary from CSV, TXT, or ZIP files
 - Support for custom column mappings and delimiters
 - Navigation between vocabulary entries (Previous/Next buttons)
-- Automatic AI enhancement for missing definitions/pronunciations
+- **Automatic AI enhancement for missing definitions/pronunciations**
+- **Smart fallback to local IPA conversion when AI unavailable**
 - Image loading from ZIP archives with "images" subdirectory support
 
 ### 🔊 Audio Features
@@ -29,6 +30,7 @@ An advanced speech recognition application with pronunciation training capabilit
 - Multiple delimiter support (comma, pipe, tab, semicolon)
 - Language selection for speech recognition
 - Ollama model configuration
+- **Visual AI status indicator with color-coded feedback**
 
 ## Installation
 
@@ -158,6 +160,11 @@ Supported delimiters:
 - **Definition Generation**: Creates definitions for vocabulary entries
 - **Pronunciation Guide**: Generates English and IPA pronunciations
 - **Fallback Support**: Local IPA conversion when AI is unavailable
+- **Visual Status Indicators**: Color-coded AI connection status
+  - 🟡 Disconnected (Yellow)
+  - 🟢 Connected (Green)
+  - 🔴 Busy/Error (Red)
+  - 🟡 Connecting (Orange)
 
 ## Testing
 
@@ -173,6 +180,9 @@ python test_zip_image_loading.py
 python test_images_directory.py
 python test_column_extension.py
 python test_column6_corrected.py
+python test_missing_data_fix_verification.py
+python test_navigation_fix.py
+python test_ai_status_colors.py
 ```
 
 ## Project Structure
@@ -186,7 +196,10 @@ ASRapp/
 ├── Input/                    # Sample input files
 │   ├── vocabulary_sample.csv
 │   └── vocabulary_sample.zip
-├── test_*.py                 # Test files
+├── test_*.py                 # Test files including:
+│   ├── test_missing_data_fix_verification.py
+│   ├── test_navigation_fix.py
+│   └── test_ai_status_colors.py
 └── verify_changes.py         # Verification scripts
 ```
 
@@ -238,5 +251,8 @@ The application provides detailed status messages in the status text area at the
 - **Enhanced Image Loading**: Improved ZIP file image handling with extension support
 - **AI Integration**: Robust fallback mechanisms for pronunciation and definitions
 - **UI Improvements**: Better status feedback and error handling
+- **Missing Data Auto-Generation**: Automatic AI enhancement for vocabulary entries with incomplete data
+- **Visual AI Status Indicator**: Color-coded status display (Yellow=Disconnected, Green=Connected, Red=Busy/Error, Orange=Connecting)
+- **Enhanced Error Handling**: Improved timeout management and detailed error reporting for AI operations
 
 For detailed changelog, see commit history.
