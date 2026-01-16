@@ -161,9 +161,10 @@ Supported delimiters:
 - **Pronunciation Guide**: Generates English and IPA pronunciations
 - **Fallback Support**: Local IPA conversion when AI is unavailable
 - **Visual Status Indicators**: Color-coded AI connection status
-  - 🟡 Disconnected (Yellow)
+  - ⚪ Disconnected (Gray)
   - 🟢 Connected (Green)
-  - 🔴 Busy/Error (Red)
+  - 🔴 Busy (Red)
+  - 🔴 Error (Red)
   - 🟡 Connecting (Orange)
 
 ## Testing
@@ -183,6 +184,21 @@ python test_column6_corrected.py
 python test_missing_data_fix_verification.py
 python test_navigation_fix.py
 python test_ai_status_colors.py
+```
+
+## Local Git
+
+To save your changes to the local git repository, use the following commands:
+
+```bash
+# Stage all changes
+git add .
+
+# Commit the changes with a message
+git commit -m "Your commit message here"
+
+# Check the status of the repository
+git status
 ```
 
 ## Project Structure
@@ -247,12 +263,15 @@ The application provides detailed status messages in the status text area at the
 ## Version History
 
 ### Latest Updates
+- **AI Status Indicator Fix**: Corrected the AI status indicator to show "Busy" (Red) during AI lookups.
+- **Asynchronous AI Data Fetching**: Implemented threading for AI data requests to prevent UI freezing and improve responsiveness.
+- **Automatic Vocabulary Enhancement**: When loading files with missing data, the application now automatically fetches pronunciation and definitions from the AI.
 - **Column 6 Configuration**: Image filenames now loaded from column 6
 - **Enhanced Image Loading**: Improved ZIP file image handling with extension support
 - **AI Integration**: Robust fallback mechanisms for pronunciation and definitions
 - **UI Improvements**: Better status feedback and error handling
 - **Missing Data Auto-Generation**: Automatic AI enhancement for vocabulary entries with incomplete data
-- **Visual AI Status Indicator**: Color-coded status display (Yellow=Disconnected, Green=Connected, Red=Busy/Error, Orange=Connecting)
+- **Visual AI Status Indicator**: Color-coded status display (Gray=Disconnected, Green=Connected, Red=Busy/Error, Orange=Connecting)
 - **Enhanced Error Handling**: Improved timeout management and detailed error reporting for AI operations
 
 For detailed changelog, see commit history.

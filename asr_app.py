@@ -576,6 +576,63 @@ class ASRThread(QThread):
         return text
 
 
+class AIDataThread(QThread):
+    update_status = pyqtSignal(str, str)
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, reference_text, config):
+        super().__init__()
+        self.reference_text = reference_text
+        self.config = config
+
+    def run(self):
+        try:
+            self.update_status.emit("busy", "red")
+            
+            import subprocess
+            import json
+
+            pron_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{self.reference_text}", provide the following information in a structured format:
+1.  **English:** The modern phonetic pronunciation in simple, readable English symbols.
+2.  **IPA:** The accurate International Phonetic Alphabet (IPA) transcription.
+3.  **Transcription:** A clear, accurate transcription of the phrase.
+Respond with each item clearly labeled. For example:
+English: [English pronunciation]
+IPA: [IPA transcription]
+Transcription: [transcription]
+"""
+
+            def_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{self.reference_text}", provide:
+1. Clear definition in English
+2. Grammatical category
+3. Usage context if applicable
+Be concise but informative."""
+
+            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
+
+            pron_result = subprocess.run([
+                'ollama', 'run', selected_model, pron_prompt
+            ], capture_output=True, text=True, timeout=45, encoding='utf-8')
+
+            def_result = subprocess.run([
+                'ollama', 'run', selected_model, def_prompt
+            ], capture_output=True, text=True, timeout=45, encoding='utf-8')
+
+            results = {
+                'pron_result': pron_result,
+                'def_result': def_result,
+            }
+            self.finished.emit(results)
+
+        except subprocess.TimeoutExpired:
+            self.error.emit("AI request timed out. Please check if Ollama is running and responsive.")
+        except FileNotFoundError:
+            self.error.emit("Ollama is not installed or not in PATH. Please install Ollama first.")
+        except Exception as e:
+            self.error.emit(f"Failed to get AI data: {str(e)}")
+
+
 class ASRApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -601,6 +658,7 @@ class ASRApp(QMainWindow):
             }
         }
         self.pronunciation_data = None
+        self.ai_thread = None
         
         # Vocabulary file handling attributes
         self.vocabulary_data = []
@@ -1105,159 +1163,100 @@ class ASRApp(QMainWindow):
         return cleaned.strip()
     
     def load_ai_data(self):
-        """Load pronunciation and definition data from Ollama AI with JSON interface"""
         reference_text = self.reference_text.text().strip()
         if not reference_text:
             QMessageBox.warning(self, "No Text", "Please enter text to get AI assistance.")
             return
+
+        self.status_text.append(f"[{self.get_current_time()}] 🚀 Requesting AI data for: '{reference_text}'")
+        self.load_ai_btn.setEnabled(False) # Disable button while running
+        self.ai_thread = AIDataThread(reference_text, self.config)
+        self.ai_thread.update_status.connect(self.update_ai_status)
+        self.ai_thread.finished.connect(self.on_ai_data_finished)
+        self.ai_thread.error.connect(self.on_ai_error)
+        self.ai_thread.start()
+
+    def on_ai_data_finished(self, results):
+        pron_result = results['pron_result']
+        def_result = results['def_result']
+
+        # Process pronunciation response
+        if pron_result.returncode == 0 and pron_result.stdout.strip():
+            ai_response = pron_result.stdout.strip()
+            self.status_text.append(f"[{self.get_current_time()}] 🤖 AI Raw Response:\n{ai_response}")
+
+            # Parse the structured response
+            english_pron = "N/A"
+            ipa_pron = "N/A"
+            
+            for line in ai_response.split('\n'):
+                if line.lower().startswith("english:"):
+                    english_pron = self.clean_ai_response(line.split(":", 1)[1])
+                elif line.lower().startswith("ipa:"):
+                    ipa_pron = self.clean_ai_response(line.split(":", 1)[1])
+
+            self.status_text.append(f"[{self.get_current_time()}] parsed English: {english_pron}")
+            self.status_text.append(f"[{self.get_current_time()}] parsed IPA: {ipa_pron}")
+
+            # Combine with current English text in proper format
+            english_text = self.reference_text.text().strip()
+            if english_text:
+                combined_display = f"English: {english_pron}\nIPA:     {ipa_pron}"
+                self.pronunciation_text.setPlainText(combined_display)
+                self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded.")
+            else:
+                self.pronunciation_text.setPlainText(f"IPA: {ipa_pron}")
+                self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded.")
+        else:
+            # Fall back to local IPA conversion if AI fails
+            self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI pronunciation failed, using local conversion")
+            english_text = self.reference_text.text().strip()
+            if english_text:
+                local_ipa = self.text_to_ipa(english_text)
+                combined_display = f"English: {english_text}\nIPA:     {local_ipa} (Local conversion)"
+                self.pronunciation_text.setPlainText(combined_display)
+                self.status_text.append(f"[{self.get_current_time()}] 📝 Local IPA: {local_ipa}")
+            else:
+                self.pronunciation_text.setPlainText("Failed to get pronunciation")
+            
+            # Log detailed error information
+            if pron_result.returncode != 0:
+                self.status_text.append(f"[{self.get_current_time()}] ❌ Pronunciation error code: {pron_result.returncode}")
+            if not pron_result.stdout.strip():
+                self.status_text.append(f"[{self.get_current_time()}] ❌ Empty pronunciation response")
+            
+        # Process definition response
+        if def_result.returncode == 0 and def_result.stdout.strip():
+            definition = def_result.stdout.strip()
+            # Clean up the response
+            definition = self.clean_ai_response(definition)
+            self.definition_text.setPlainText(definition)
+            self.status_text.append(f"[{self.get_current_time()}] ✅ AI definition loaded")
+        else:
+            self.definition_text.setPlainText("Failed to get definition from AI")
+            self.status_text.append(f"[{self.get_current_time()}] ❌ AI definition request failed")
+            
+            # Log detailed error information
+            if def_result.returncode != 0:
+                self.status_text.append(f"[{self.get_current_time()}] ❌ Definition error code: {def_result.returncode}")
+            if not def_result.stdout.strip():
+                self.status_text.append(f"[{self.get_current_time()}] ❌ Empty definition response")
         
-        try:
-            # Update status
-            self.update_ai_status("connecting", "orange")
-            self.status_text.append(f"[{self.get_current_time()}] 🚀 Requesting AI data for: '{reference_text}'")
-            
-            # Debug logging
-            self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Using model: {self.config.get('ollama_model', 'kimi-k2:1t-cloud')}")
-            self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Language: {self.config['language_name']}")
-            
-            # Create structured JSON request for better response management
-            import subprocess
-            import json
-            
-            # Enhanced pronunciation prompt for modern pronunciation
-            pron_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{reference_text}", provide the following information in a structured format:
-1.  **English:** The modern phonetic pronunciation in simple, readable English symbols.
-2.  **IPA:** The accurate International Phonetic Alphabet (IPA) transcription.
-3.  **Transcription:** A clear, accurate transcription of the phrase.
-Respond with each item clearly labeled. For example:
-English: [English pronunciation]
-IPA: [IPA transcription]
-Transcription: [transcription]
-"""
+        # Update final status
+        if pron_result.returncode == 0 and def_result.returncode == 0 and pron_result.stdout.strip() and def_result.stdout.strip():
+            self.update_ai_status("connected", "green")
+            self.status_text.append(f"[{self.get_current_time()}] 🎉 AI data loading completed successfully")
+        else:
+            self.update_ai_status("partial", "yellow")
+            self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI data loading completed with partial results")
+        
+        self.load_ai_btn.setEnabled(True) # Re-enable button
 
-            # Enhanced definition prompt
-            def_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{reference_text}", provide:
-1. Clear definition in English
-2. Grammatical category
-3. Usage context if applicable
-Be concise but informative."""
-            
-            # Run AI requests with improved error handling
-            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
-            
-            # Debug: Log the actual command being executed
-            self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Executing command: ollama run {selected_model} [prompt]")
-            
-            # Get pronunciation with timeout and detailed error reporting
-            try:
-                pron_result = subprocess.run([
-                    'ollama', 'run', selected_model, pron_prompt
-                ], capture_output=True, text=True, timeout=45, encoding='utf-8')
-                
-                self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Pronunciation return code: {pron_result.returncode}")
-                if pron_result.stderr:
-                    self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Pronunciation stderr: {pron_result.stderr.strip()}")
-                    
-            except subprocess.TimeoutExpired as te:
-                self.status_text.append(f"[{self.get_current_time()}] ⏱️ Debug: Pronunciation timeout after {te.timeout} seconds")
-                raise
-            
-            # Process pronunciation response
-            if pron_result.returncode == 0 and pron_result.stdout.strip():
-                ai_response = pron_result.stdout.strip()
-                self.status_text.append(f"[{self.get_current_time()}] 🤖 AI Raw Response:\n{ai_response}")
-
-                # Parse the structured response
-                english_pron = "N/A"
-                ipa_pron = "N/A"
-                
-                for line in ai_response.split('\n'):
-                    if line.lower().startswith("english:"):
-                        english_pron = self.clean_ai_response(line.split(":", 1)[1])
-                    elif line.lower().startswith("ipa:"):
-                        ipa_pron = self.clean_ai_response(line.split(":", 1)[1])
-
-                self.status_text.append(f"[{self.get_current_time()}] parsed English: {english_pron}")
-                self.status_text.append(f"[{self.get_current_time()}] parsed IPA: {ipa_pron}")
-
-                # Combine with current English text in proper format
-                english_text = self.reference_text.text().strip()
-                if english_text:
-                    combined_display = f"English: {english_pron}\nIPA:     {ipa_pron}"
-                    self.pronunciation_text.setPlainText(combined_display)
-                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded.")
-                else:
-                    self.pronunciation_text.setPlainText(f"IPA: {ipa_pron}")
-                    self.status_text.append(f"[{self.get_current_time()}] ✅ AI pronunciation loaded.")
-            else:
-                # Fall back to local IPA conversion if AI fails
-                self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI pronunciation failed, using local conversion")
-                english_text = self.reference_text.text().strip()
-                if english_text:
-                    local_ipa = self.text_to_ipa(english_text)
-                    combined_display = f"English: {english_text}\nIPA:     {local_ipa} (Local conversion)"
-                    self.pronunciation_text.setPlainText(combined_display)
-                    self.status_text.append(f"[{self.get_current_time()}] 📝 Local IPA: {local_ipa}")
-                else:
-                    self.pronunciation_text.setPlainText("Failed to get pronunciation")
-                
-                # Log detailed error information
-                if pron_result.returncode != 0:
-                    self.status_text.append(f"[{self.get_current_time()}] ❌ Pronunciation error code: {pron_result.returncode}")
-                if not pron_result.stdout.strip():
-                    self.status_text.append(f"[{self.get_current_time()}] ❌ Empty pronunciation response")
-                
-            # Get definition with similar enhanced handling
-            try:
-                def_result = subprocess.run([
-                    'ollama', 'run', selected_model, def_prompt
-                ], capture_output=True, text=True, timeout=45, encoding='utf-8')
-                
-                self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Definition return code: {def_result.returncode}")
-                if def_result.stderr:
-                    self.status_text.append(f"[{self.get_current_time()}] 🔧 Debug: Definition stderr: {def_result.stderr.strip()}")
-                    
-            except subprocess.TimeoutExpired as te:
-                self.status_text.append(f"[{self.get_current_time()}] ⏱️ Debug: Definition timeout after {te.timeout} seconds")
-                raise
-            
-            # Process definition response
-            if def_result.returncode == 0 and def_result.stdout.strip():
-                definition = def_result.stdout.strip()
-                # Clean up the response
-                definition = self.clean_ai_response(definition)
-                self.definition_text.setPlainText(definition)
-                self.status_text.append(f"[{self.get_current_time()}] ✅ AI definition loaded")
-            else:
-                self.definition_text.setPlainText("Failed to get definition from AI")
-                self.status_text.append(f"[{self.get_current_time()}] ❌ AI definition request failed")
-                
-                # Log detailed error information
-                if def_result.returncode != 0:
-                    self.status_text.append(f"[{self.get_current_time()}] ❌ Definition error code: {def_result.returncode}")
-                if not def_result.stdout.strip():
-                    self.status_text.append(f"[{self.get_current_time()}] ❌ Empty definition response")
-            
-            # Update final status
-            if pron_result.returncode == 0 and def_result.returncode == 0 and pron_result.stdout.strip() and def_result.stdout.strip():
-                self.update_ai_status("connected", "green")
-                self.status_text.append(f"[{self.get_current_time()}] 🎉 AI data loading completed successfully")
-            else:
-                self.update_ai_status("partial", "yellow")
-                self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI data loading completed with partial results")
-                
-        except subprocess.TimeoutExpired:
-            self.update_ai_status("error", "red")
-            self.status_text.append(f"[{self.get_current_time()}] ⏱️ AI request timed out")
-            QMessageBox.critical(self, "Timeout", "AI request timed out. Please check if Ollama is running and responsive.")
-        except FileNotFoundError:
-            self.update_ai_status("error", "red")
-            self.status_text.append(f"[{self.get_current_time()}] ❌ Ollama not found")
-            QMessageBox.critical(self, "Ollama Not Found", "Ollama is not installed or not in PATH. Please install Ollama first.")
-        except Exception as e:
-            self.update_ai_status("error", "red")
-            self.status_text.append(f"[{self.get_current_time()}] ❌ AI request error: {str(e)}")
-            QMessageBox.critical(self, "AI Error", f"Failed to get AI data: {str(e)}")
+    def on_ai_error(self, error_msg):
+        self.update_ai_status("error", "red")
+        self.status_text.append(f"[{self.get_current_time()}] ❌ AI request error: {error_msg}")
+        QMessageBox.critical(self, "AI Error", error_msg)
+        self.load_ai_btn.setEnabled(True) # Re-enable button
     
     def load_vocabulary_file(self):
         """Load vocabulary from text, CSV, or ZIP file"""
@@ -1470,46 +1469,23 @@ Be concise but informative."""
         # Update reference text
         self.reference_text.setText(entry['reference'])
         
-        # Update definition with automatic AI generation
+        # Update definition and pronunciation from file if available
         definition = entry.get('definition', '')
-        if not definition:
-            if self.config.get('ollama_model'):
-                # Use AI to generate definition if missing
-                definition = self.generate_definition_with_ai(entry['reference'])
-                if definition:
-                    self.status_text.append(f"[{self.get_current_time()}] 🤖 Generated definition for '{entry['reference']}': {definition[:50]}...")
-                else:
-                    definition = "No definition available"
-            else:
-                definition = "No definition available (AI not configured)"
-        self.definition_text.setPlainText(definition)
-        
-        # Update pronunciation with automatic AI generation
         english_pron = entry.get('english_pronunciation', '')
         ipa_pron = entry.get('ipa_pronunciation', '')
+
+        self.definition_text.setPlainText(definition or "No definition available")
         
-        # Generate missing pronunciation data automatically
-        if not english_pron or not ipa_pron:
-            if self.config.get('ollama_model'):
-                # Use AI to generate pronunciation if missing
-                ai_pron = self.generate_pronunciation_with_ai(entry['reference'])
-                if ai_pron and isinstance(ai_pron, dict):
-                    english_pron = english_pron or ai_pron.get('english', '')
-                    ipa_pron = ipa_pron or ai_pron.get('ipa', '')
-                    if english_pron or ipa_pron:
-                        self.status_text.append(f"[{self.get_current_time()}] 🤖 Generated pronunciation for '{entry['reference']}'")
-                
-        # Display pronunciation (either from file, AI, or local conversion)
         if english_pron or ipa_pron:
             combined_pron = f"English: {english_pron or 'N/A'}\nIPA:     {ipa_pron or 'N/A'}"
             self.pronunciation_text.setPlainText(combined_pron)
         else:
-            # Fallback to local IPA conversion
-            local_ipa = self.text_to_ipa_modern(entry['reference'])
-            combined_pron = f"English: {entry['reference']}\nIPA:     {local_ipa} (Local conversion)"
-            self.pronunciation_text.setPlainText(combined_pron)
-            self.status_text.append(f"[{self.get_current_time()}] 📝 Used local IPA conversion for '{entry['reference']}': {local_ipa}")
-        
+            self.pronunciation_text.setPlainText("No pronunciation available")
+
+        # If definition or pronunciation are missing, fetch them from AI
+        if not definition or not english_pron or not ipa_pron:
+            self.load_ai_data()
+
         # Handle image
         if self.enable_image_cb.isChecked() and entry.get('image_filename', ''):
             self.load_vocabulary_image(entry.get('image_filename', ''), entry.get('image_description', ''))
@@ -1533,87 +1509,6 @@ Be concise but informative."""
         if self.current_vocab_index < len(self.vocabulary_data) - 1:
             self.current_vocab_index += 1
             self.display_current_vocabulary()
-    
-    def generate_definition_with_ai(self, text):
-        """Generate definition using AI"""
-        try:
-            import subprocess
-            
-            prompt = f"""Provide a clear definition of "{text}" in English. Include grammatical category if applicable."""
-            
-            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
-            self.status_text.append(f"[{self.get_current_time()}] 🤖 Generating definition for '{text}' using {selected_model}")
-            
-            result = subprocess.run([
-                'ollama', 'run', selected_model, prompt
-            ], capture_output=True, text=True, timeout=45, encoding='utf-8')
-            
-            if result.returncode == 0 and result.stdout.strip():
-                definition = self.clean_ai_response(result.stdout.strip())
-                if definition:
-                    self.status_text.append(f"[{self.get_current_time()}] ✅ Generated definition: {definition[:100]}...")
-                    return definition
-                else:
-                    self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI returned empty definition")
-            else:
-                self.status_text.append(f"[{self.get_current_time()}] ❌ AI definition generation failed - return code: {result.returncode}")
-                if result.stderr:
-                    self.status_text.append(f"[{self.get_current_time()}] ❌ AI stderr: {result.stderr.strip()[:100]}...")
-                
-        except subprocess.TimeoutExpired:
-            self.status_text.append(f"[{self.get_current_time()}] ⏱️ AI definition generation timed out")
-        except Exception as e:
-            self.status_text.append(f"[{self.get_current_time()}] ❌ AI definition generation error: {str(e)}")
-        
-        return ""
-    
-    def generate_pronunciation_with_ai(self, text):
-        """Generate pronunciation using AI"""
-        try:
-            import subprocess
-            
-            prompt = f"""For the English phrase "{text}", provide:
-1. English pronunciation symbols
-2. IPA transcription
-Respond with each clearly labeled."""
-            
-            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
-            self.status_text.append(f"[{self.get_current_time()}] 🤖 Generating pronunciation for '{text}' using {selected_model}")
-            
-            result = subprocess.run([
-                'ollama', 'run', selected_model, prompt
-            ], capture_output=True, text=True, timeout=45, encoding='utf-8')
-            
-            if result.returncode == 0 and result.stdout.strip():
-                ai_response = result.stdout.strip()
-                self.status_text.append(f"[{self.get_current_time()}] 🤖 AI pronunciation response received")
-                
-                english_pron = ""
-                ipa_pron = ""
-                
-                for line in ai_response.split('\n'):
-                    if line.lower().startswith("english:"):
-                        english_pron = self.clean_ai_response(line.split(":", 1)[1])
-                    elif line.lower().startswith("ipa:"):
-                        ipa_pron = self.clean_ai_response(line.split(":", 1)[1])
-                
-                # Return dictionary only if we got at least one pronunciation
-                if english_pron or ipa_pron:
-                    self.status_text.append(f"[{self.get_current_time()}] ✅ Generated pronunciation - English: {english_pron[:30]}..., IPA: {ipa_pron[:30]}...")
-                    return {'english': english_pron, 'ipa': ipa_pron}
-                else:
-                    self.status_text.append(f"[{self.get_current_time()}] ⚠️ AI returned incomplete pronunciation data")
-            else:
-                self.status_text.append(f"[{self.get_current_time()}] ❌ AI pronunciation generation failed - return code: {result.returncode}")
-                if result.stderr:
-                    self.status_text.append(f"[{self.get_current_time()}] ❌ AI stderr: {result.stderr.strip()[:100]}...")
-                
-        except subprocess.TimeoutExpired:
-            self.status_text.append(f"[{self.get_current_time()}] ⏱️ AI pronunciation generation timed out")
-        except Exception as e:
-            self.status_text.append(f"[{self.get_current_time()}] ❌ AI pronunciation generation error: {str(e)}")
-        
-        return None
     
     def load_vocabulary_image(self, image_filename, image_description=""):
         """Load and display vocabulary image"""
