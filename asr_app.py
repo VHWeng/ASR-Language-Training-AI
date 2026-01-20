@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QTextEdit, QLabel, 
                              QFileDialog, QDialog, QComboBox, QCheckBox,
                              QLineEdit, QMessageBox, QToolButton, QGroupBox,
-                             QProgressBar, QSpinBox, QTabWidget)
+                             QProgressBar, QSpinBox, QTabWidget, QGridLayout)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon, QFont, QColor, QTextCharFormat, QTextCursor, QPixmap
 import speech_recognition as sr
