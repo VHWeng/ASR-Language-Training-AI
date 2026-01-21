@@ -838,7 +838,7 @@ class ASRApp(QMainWindow):
         ref_layout.addWidget(QLabel("Reference Text:"))
         self.reference_text = QLineEdit()
         self.reference_text.setPlaceholderText("Enter the text you want to practice...")
-        # Set default font size to 14pt
+        # Set default font size to 12pt
         ref_font = QFont()
         ref_font.setPointSize(14)
         self.reference_text.setFont(ref_font)
@@ -921,8 +921,8 @@ class ASRApp(QMainWindow):
         self.definition_text.setMaximumHeight(30)  # Reduced to 1 line height
         self.definition_text.setPlaceholderText("Definition/translation from Ollama AI will appear here...")
         self.definition_text.setReadOnly(True)
-        self.definition_text.setFont(QFont("Arial", 14))  # Set default font size to 14pt
-        self.definition_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 14pt; }")
+        self.definition_text.setFont(QFont("Arial", 12))  # Set default font size to 12pt
+        self.definition_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 12pt; }")
         self.definition_text.show()  # Show by default
         
         # Pronunciation help text box (optional, 6-line scrollable)
@@ -930,8 +930,8 @@ class ASRApp(QMainWindow):
         self.pron_help_text.setMaximumHeight(120)  # Increased to 6 lines
         self.pron_help_text.setPlaceholderText("Pronunciation help from Ollama AI will appear here when enabled...")
         self.pron_help_text.setReadOnly(True)
-        self.pron_help_text.setFont(QFont("Arial", 14))  # Set default font size to 14pt
-        self.pron_help_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 14pt; }")
+        self.pron_help_text.setFont(QFont("Arial", 12))  # Set default font size to 12pt
+        self.pron_help_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 12pt; }")
         self.pron_help_text.hide()  # Hidden by default
         
         # Add font size controls for definition text
