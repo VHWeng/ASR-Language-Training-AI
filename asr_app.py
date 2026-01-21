@@ -894,8 +894,8 @@ class ASRApp(QMainWindow):
         self.pronunciation_text.setMaximumHeight(80)  # Increased height for two lines
         self.pronunciation_text.setPlaceholderText("Enter text above to see English and IPA pronunciation...")
         self.pronunciation_text.setReadOnly(True)
-        self.pronunciation_text.setFont(QFont("Arial", 11))  # Use Arial for better IPA symbol support
-        self.pronunciation_text.setStyleSheet("QTextEdit { font-family: Arial; }")
+        self.pronunciation_text.setFont(QFont("Arial", 14))  # Use Arial for better IPA symbol support, 14pt default
+        self.pronunciation_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 14pt; }")
         self.pronunciation_text.show()  # Show by default
         
         # Add font size controls for pronunciation text
@@ -921,13 +921,17 @@ class ASRApp(QMainWindow):
         self.definition_text.setMaximumHeight(30)  # Reduced to 1 line height
         self.definition_text.setPlaceholderText("Definition/translation from Ollama AI will appear here...")
         self.definition_text.setReadOnly(True)
+        self.definition_text.setFont(QFont("Arial", 14))  # Set default font size to 14pt
+        self.definition_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 14pt; }")
         self.definition_text.show()  # Show by default
         
-        # Pronunciation help text box (optional, 4-line scrollable)
+        # Pronunciation help text box (optional, 6-line scrollable)
         self.pron_help_text = QTextEdit()
-        self.pron_help_text.setMaximumHeight(80)  # About 4 lines
+        self.pron_help_text.setMaximumHeight(120)  # Increased to 6 lines
         self.pron_help_text.setPlaceholderText("Pronunciation help from Ollama AI will appear here when enabled...")
         self.pron_help_text.setReadOnly(True)
+        self.pron_help_text.setFont(QFont("Arial", 14))  # Set default font size to 14pt
+        self.pron_help_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 14pt; }")
         self.pron_help_text.hide()  # Hidden by default
         
         # Add font size controls for definition text
@@ -1231,7 +1235,7 @@ class ASRApp(QMainWindow):
         self.ai_status_indicator.setStyleSheet(f"QLabel {{ color: {display_color}; font-weight: bold; }}")
     
     def clean_ai_response(self, response):
-        """Clean AI response by removing markdown, extra formatting, and noise"""
+        """Clean AI response by removing markdown, extra formatting, noise, and blank lines"""
         if not response:
             return ""
         
@@ -1241,12 +1245,14 @@ class ASRApp(QMainWindow):
         cleaned = cleaned.replace("**", "")   # Remove bold markers
         cleaned = cleaned.replace("*", "")    # Remove italic markers
         
-        # Remove common prefixes/suffixes
-        lines = cleaned.split('\n')
-        if lines:
+        # Remove blank lines and normalize whitespace
+        lines = [line.strip() for line in cleaned.split('\n') if line.strip()]
+        cleaned = '\n'.join(lines)
+        
+        # Remove common prefixes/suffixes for single-line responses
+        if '\n' not in cleaned:
             # Take the first meaningful line for pronunciation
             for line in lines:
-                line = line.strip()
                 if line and not line.lower().startswith(('note:', 'tip:', 'hint:')):
                     cleaned = line
                     break
