@@ -609,6 +609,15 @@ Transcription: [transcription]
 3. Usage context if applicable
 Be concise but informative."""
 
+            # New prompt for pronunciation help
+            pron_help_prompt = f"""You are a pronunciation coach. For the {self.config['language_name']} phrase "{self.reference_text}", provide detailed pronunciation guidance in English:
+1. Break down the phrase into syllables with stress patterns
+2. Explain difficult sounds or sound combinations
+3. Provide tips for proper mouth positioning
+4. Note any tricky pronunciation aspects
+5. Give examples of similar sounds if helpful
+Be practical and educational, focusing on helping learners pronounce correctly."""
+
             selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
 
             pron_result = subprocess.run([
@@ -619,9 +628,15 @@ Be concise but informative."""
                 'ollama', 'run', selected_model, def_prompt
             ], capture_output=True, text=True, timeout=45, encoding='utf-8')
 
+            # Run pronunciation help request
+            pron_help_result = subprocess.run([
+                'ollama', 'run', selected_model, pron_help_prompt
+            ], capture_output=True, text=True, timeout=45, encoding='utf-8')
+
             results = {
                 'pron_result': pron_result,
                 'def_result': def_result,
+                'pron_help_result': pron_help_result,
             }
             self.finished.emit(results)
 
@@ -632,6 +647,62 @@ Be concise but informative."""
         except Exception as e:
             self.error.emit(f"Failed to get AI data: {str(e)}")
 
+
+class AIPronHelpThread(QThread):
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, reference_text, config):
+        super().__init__()
+        self.reference_text = reference_text
+        self.config = config
+
+    def run(self):
+        try:
+            import subprocess
+            
+            # Prompt for pronunciation help
+            pron_help_prompt = f"""You are a pronunciation coach. For the {self.config['language_name']} phrase "{self.reference_text}", provide detailed pronunciation guidance in English:
+1. Break down the phrase into syllables with stress patterns
+2. Explain difficult sounds or sound combinations
+3. Provide tips for proper mouth positioning
+4. Note any tricky pronunciation aspects
+5. Give examples of similar sounds if helpful
+Be practical and educational, focusing on helping learners pronounce correctly."""
+
+            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
+
+            pron_help_result = subprocess.run([
+                'ollama', 'run', selected_model, pron_help_prompt
+            ], capture_output=True, text=True, timeout=45, encoding='utf-8')
+
+            if pron_help_result.returncode == 0 and pron_help_result.stdout.strip():
+                help_text = pron_help_result.stdout.strip()
+                # Clean up the response
+                help_text = self.clean_ai_response(help_text)
+                self.finished.emit(help_text)
+            else:
+                self.error.emit("Failed to get pronunciation help from AI")
+
+        except subprocess.TimeoutExpired:
+            self.error.emit("AI request timed out. Please check if Ollama is running and responsive.")
+        except FileNotFoundError:
+            self.error.emit("Ollama is not installed or not in PATH. Please install Ollama first.")
+        except Exception as e:
+            self.error.emit(f"Failed to get pronunciation help: {str(e)}")
+    
+    def clean_ai_response(self, response):
+        """Clean AI response by removing markdown, extra formatting, and noise"""
+        if not response:
+            return ""
+        
+        # Remove common markdown artifacts
+        cleaned = response.strip()
+        cleaned = cleaned.replace("```", "")  # Remove code blocks
+        cleaned = cleaned.replace("**", "")   # Remove bold markers
+        cleaned = cleaned.replace("*", "")    # Remove italic markers
+        
+        return cleaned.strip()
 
 class ASRApp(QMainWindow):
     def __init__(self):
@@ -719,9 +790,14 @@ class ASRApp(QMainWindow):
         self.show_definition_cb.setChecked(True)
         self.show_definition_cb.toggled.connect(self.toggle_definition_display)
         
+        self.show_pron_help_cb = QCheckBox("Show Pronunciation Help")
+        self.show_pron_help_cb.setChecked(False)
+        self.show_pron_help_cb.toggled.connect(self.toggle_pron_help_display)
+        
         mode_layout.addWidget(self.training_mode_cb)
         mode_layout.addWidget(self.show_pronunciation_cb)
         mode_layout.addWidget(self.show_definition_cb)
+        mode_layout.addWidget(self.show_pron_help_cb)
         
         # Add AI status indicator
         self.ai_status_indicator = QLabel("⚪ AI Disconnected")
@@ -858,6 +934,13 @@ class ASRApp(QMainWindow):
         self.definition_text.setReadOnly(True)
         self.definition_text.show()  # Show by default
         
+        # Pronunciation help text box (optional, 4-line scrollable)
+        self.pron_help_text = QTextEdit()
+        self.pron_help_text.setMaximumHeight(80)  # About 4 lines
+        self.pron_help_text.setPlaceholderText("Pronunciation help from Ollama AI will appear here when enabled...")
+        self.pron_help_text.setReadOnly(True)
+        self.pron_help_text.hide()  # Hidden by default
+        
         # Add font size controls for definition text
         def_font_layout = QHBoxLayout()
         self.def_font_minus_btn = QPushButton("-")
@@ -875,6 +958,9 @@ class ASRApp(QMainWindow):
         def_font_layout.addStretch()
         pron_layout.addLayout(def_font_layout)
         pron_layout.addWidget(self.definition_text)
+        
+        # Add pronunciation help text box
+        pron_layout.addWidget(self.pron_help_text)
         
         # Add navigation buttons layout here
         pron_layout.addLayout(nav_layout)
@@ -1114,6 +1200,21 @@ class ASRApp(QMainWindow):
         else:
             self.definition_text.hide()
     
+    def toggle_pron_help_display(self, enabled):
+        """Toggle pronunciation help text box visibility"""
+        if enabled:
+            # Defer visibility setting to ensure window is fully initialized
+            def deferred_show():
+                self.pron_help_text.show()
+                # Auto-load AI pronunciation help if text is present
+                if self.reference_text.text().strip():
+                    self.load_pron_help_ai()
+            
+            # Use timer to defer until after window is shown
+            QTimer.singleShot(100, deferred_show)
+        else:
+            self.pron_help_text.hide()
+    
     def update_ai_status(self, status, color="gray"):
         """Update AI status indicator"""
         status_icons = {
@@ -1176,6 +1277,23 @@ class ASRApp(QMainWindow):
         self.ai_thread.finished.connect(self.on_ai_data_finished)
         self.ai_thread.error.connect(self.on_ai_error)
         self.ai_thread.start()
+
+    def load_pron_help_ai(self):
+        """Load pronunciation help from AI when pronunciation help is enabled"""
+        reference_text = self.reference_text.text().strip()
+        if not reference_text:
+            return
+
+        if not self.show_pron_help_cb.isChecked():
+            return
+
+        self.status_text.append(f"[{self.get_current_time()}] 🗣️ Requesting pronunciation help for: '{reference_text}'")
+        
+        # Create a separate thread for pronunciation help to avoid blocking
+        self.pron_help_thread = AIPronHelpThread(reference_text, self.config)
+        self.pron_help_thread.finished.connect(self.on_pron_help_finished)
+        self.pron_help_thread.error.connect(self.on_pron_help_error)
+        self.pron_help_thread.start()
 
     def on_ai_data_finished(self, results):
         pron_result = results['pron_result']
@@ -1258,6 +1376,16 @@ class ASRApp(QMainWindow):
         self.status_text.append(f"[{self.get_current_time()}] ❌ AI request error: {error_msg}")
         QMessageBox.critical(self, "AI Error", error_msg)
         self.load_ai_btn.setEnabled(True) # Re-enable button
+    
+    def on_pron_help_finished(self, help_text):
+        """Handle completed pronunciation help request"""
+        self.pron_help_text.setPlainText(help_text)
+        self.status_text.append(f"[{self.get_current_time()}] ✅ Pronunciation help loaded")
+    
+    def on_pron_help_error(self, error_msg):
+        """Handle pronunciation help request error"""
+        self.pron_help_text.setPlainText(f"Failed to get pronunciation help: {error_msg}")
+        self.status_text.append(f"[{self.get_current_time()}] ❌ Pronunciation help error: {error_msg}")
     
     def load_vocabulary_file(self):
         """Load vocabulary from text, CSV, or ZIP file"""
@@ -1483,9 +1611,22 @@ class ASRApp(QMainWindow):
         else:
             self.pronunciation_text.setPlainText("No pronunciation available")
 
+        # Clear pronunciation help text when displaying new entry
+        # This ensures it gets refreshed when needed
+        self.pron_help_text.clear()
+        
+        # Show pronunciation help text box if checkbox is enabled
+        if self.show_pron_help_cb.isChecked():
+            # Defer visibility setting to ensure proper initialization
+            QTimer.singleShot(50, lambda: self.pron_help_text.show())
+        
         # If definition or pronunciation are missing, fetch them from AI
         if not definition or not english_pron or not ipa_pron:
             self.load_ai_data()
+        
+        # If pronunciation help is enabled, load it for the new entry
+        if self.show_pron_help_cb.isChecked():
+            self.load_pron_help_ai()
 
         # Handle image
         if self.enable_image_cb.isChecked() and entry.get('image_filename', ''):
