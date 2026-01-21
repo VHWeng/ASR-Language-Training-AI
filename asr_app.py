@@ -594,7 +594,7 @@ class AIDataThread(QThread):
             import json
 
             pron_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase "{self.reference_text}", provide the following information in a structured format:
-1.  **English:** The modern phonetic pronunciation in simple, readable English symbols.
+1.  **English:** The modern phonetic pronunciation in simple, readable English symbols, in (include quick pronunciation tip).
 2.  **IPA:** The accurate International Phonetic Alphabet (IPA) transcription.
 3.  **Transcription:** A clear, accurate transcription of the phrase.
 Respond with each item clearly labeled. For example:
@@ -611,13 +611,7 @@ Be concise but informative."""
 
             # New prompt for pronunciation help
             pron_help_prompt = f"""You are a pronunciation coach. For the {self.config['language_name']} phrase "{self.reference_text}", provide detailed pronunciation guidance in English:
-1. Break down the phrase into syllables with stress patterns
-2. Explain difficult sounds or sound combinations
-3. Provide tips for proper mouth positioning
-4. Note any tricky pronunciation aspects
-5. Give examples of similar sounds if helpful
-Be practical and educational, focusing on helping learners pronounce correctly."""
-
+1. Break down the phrase into syllables with stress patterns. Be concise but informative. Try to keep to 4 lines of text"""
             selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
 
             pron_result = subprocess.run([
@@ -663,12 +657,7 @@ class AIPronHelpThread(QThread):
             
             # Prompt for pronunciation help
             pron_help_prompt = f"""You are a pronunciation coach. For the {self.config['language_name']} phrase "{self.reference_text}", provide detailed pronunciation guidance in English:
-1. Break down the phrase into syllables with stress patterns
-2. Explain difficult sounds or sound combinations
-3. Provide tips for proper mouth positioning
-4. Note any tricky pronunciation aspects
-5. Give examples of similar sounds if helpful
-Be practical and educational, focusing on helping learners pronounce correctly."""
+1. Break down the phrase into syllables with stress patterns. Be concise but informative. Try to keep to 4 lines of text"""
 
             selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
 
