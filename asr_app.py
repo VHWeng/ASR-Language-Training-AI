@@ -898,17 +898,17 @@ class ASRApp(QMainWindow):
         self.pronunciation_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 14pt; }")
         self.pronunciation_text.show()  # Show by default
         
-        # Add font size controls for pronunciation text
+        # Add font size controls for all three text boxes below
         pron_font_layout = QHBoxLayout()
         self.pron_font_minus_btn = QPushButton("-")
         self.pron_font_minus_btn.setFixedWidth(25)
-        self.pron_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.pronunciation_text, -1))
-        self.pron_font_minus_btn.setToolTip("Decrease font size")
+        self.pron_font_minus_btn.clicked.connect(self.change_all_text_boxes_font_size(-1))
+        self.pron_font_minus_btn.setToolTip("Decrease font size for all text boxes")
         
         self.pron_font_plus_btn = QPushButton("+")
         self.pron_font_plus_btn.setFixedWidth(25)
-        self.pron_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.pronunciation_text, 1))
-        self.pron_font_plus_btn.setToolTip("Increase font size")
+        self.pron_font_plus_btn.clicked.connect(self.change_all_text_boxes_font_size(1))
+        self.pron_font_plus_btn.setToolTip("Increase font size for all text boxes")
         
         pron_font_layout.addWidget(self.pron_font_minus_btn)
         pron_font_layout.addWidget(self.pron_font_plus_btn)
@@ -2380,6 +2380,42 @@ Perfect for language learners!"""
             
         except Exception as e:
             self.status_text.append(f"[{self.get_current_time()}] Font size change error: {str(e)}")
+    
+    def change_all_text_boxes_font_size(self, delta):
+        """Return a function that changes font size for all three text boxes below Pronunciation"""
+        def change_size():
+            try:
+                # List of text boxes to modify
+                text_boxes = [
+                    self.pronunciation_text,
+                    self.definition_text, 
+                    self.pron_help_text
+                ]
+                
+                # Get current font size from pronunciation text (as reference)
+                current_font = self.pronunciation_text.currentFont()
+                current_size = current_font.pointSize()
+                if current_size == -1:
+                    current_size = 14  # Default size
+                
+                # Calculate new size
+                new_size = max(6, min(72, current_size + delta))
+                
+                # Apply new font size to all text boxes
+                for text_box in text_boxes:
+                    font = text_box.currentFont()
+                    font.setPointSize(new_size)
+                    text_box.selectAll()
+                    text_box.setCurrentFont(font)
+                    text_box.setTextColor(text_box.textColor())  # Reset selection
+                
+                # Update status
+                self.status_text.append(f"[{self.get_current_time()}] All text boxes font size changed to {new_size}pt")
+                
+            except Exception as e:
+                self.status_text.append(f"[{self.get_current_time()}] Font size change error: {str(e)}")
+        
+        return change_size
     
     def get_current_time(self):
         """Get current timestamp for status messages"""
