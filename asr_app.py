@@ -934,22 +934,6 @@ class ASRApp(QMainWindow):
         self.pron_help_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 12pt; }")
         self.pron_help_text.hide()  # Hidden by default
         
-        # Add font size controls for definition text
-        def_font_layout = QHBoxLayout()
-        self.def_font_minus_btn = QPushButton("-")
-        self.def_font_minus_btn.setFixedWidth(25)
-        self.def_font_minus_btn.clicked.connect(lambda: self.change_font_size(self.definition_text, -1))
-        self.def_font_minus_btn.setToolTip("Decrease font size")
-        
-        self.def_font_plus_btn = QPushButton("+")
-        self.def_font_plus_btn.setFixedWidth(25)
-        self.def_font_plus_btn.clicked.connect(lambda: self.change_font_size(self.definition_text, 1))
-        self.def_font_plus_btn.setToolTip("Increase font size")
-        
-        def_font_layout.addWidget(self.def_font_minus_btn)
-        def_font_layout.addWidget(self.def_font_plus_btn)
-        def_font_layout.addStretch()
-        pron_layout.addLayout(def_font_layout)
         pron_layout.addWidget(self.definition_text)
         
         # Add pronunciation help text box
