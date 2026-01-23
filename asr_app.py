@@ -918,7 +918,7 @@ class ASRApp(QMainWindow):
         
         # Definition text box (visible by default since training mode is enabled)
         self.definition_text = QTextEdit()
-        self.definition_text.setMaximumHeight(30)  # Reduced to 1 line height
+        self.definition_text.setMaximumHeight(90)  # Increased to 3 line height
         self.definition_text.setPlaceholderText("Definition/translation from Ollama AI will appear here...")
         self.definition_text.setReadOnly(True)
         self.definition_text.setFont(QFont("Arial", 12))  # Set default font size to 12pt
