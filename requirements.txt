@@ -1,13 +1,33 @@
+# Core GUI Framework
 PyQt5>=5.15.0
-SpeechRecognition>=3.8.1
+
+# Audio Processing
 sounddevice>=0.4.1
 soundfile>=0.10.2
 pydub>=0.25.1
-openai-whisper>=20231117
-numpy>=1.19.0
-gTTS>=2.5.1
 pygame>=2.5.2
 
-# Additional system requirements:
-# FFmpeg - for MP3 support (install separately)
-# PyTorch - for Whisper (will be installed automatically with whisper)
+# Speech Recognition Engines
+SpeechRecognition>=3.8.1
+openai-whisper>=20231117
+
+# Text-to-Speech
+gTTS>=2.5.1
+
+# Scientific Computing
+numpy>=1.19.0
+
+# Optional Dependencies (Install manually if needed)
+# pyaudio>=0.2.11  # For enhanced microphone support
+
+# System Requirements:
+# FFmpeg - for MP3 support and audio processing
+#   Windows: Download from https://ffmpeg.org/download.html
+#   Linux: sudo apt install ffmpeg
+#   macOS: brew install ffmpeg
+#
+# PyTorch - for Whisper (installed automatically with openai-whisper)
+#
+# Ollama - for AI features (separate installation required)
+#   Download from https://ollama.ai
+#   Models: llama3.2, mistral, or other language models

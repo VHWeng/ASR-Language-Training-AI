@@ -2148,52 +2148,75 @@ class ASRApp(QMainWindow):
     def show_help(self):
         help_text = """ASR Application with Pronunciation Training
 
-BASIC USAGE:
-1. Load or Record Audio:
-   - Browse for WAV/MP3 file, or
-   - Press and hold 'Hold to Record' button to start recording, release to stop
+🚀 GETTING STARTED
+1. Load Vocabulary:
+   - Click "📁 Load Vocabulary" to import CSV/TXT/ZIP files
+   - Supports custom column mappings and multiple delimiters
 
-2. Configure Settings:
-   - Click ⚙ to select engine, language, and model
+2. Configure Settings (Optional):
+   - Click ⚙ to select engine, language, and AI model
+   - Customize column mappings for your file structure
 
-3. Convert:
-   - Click ASR Convert to transcribe audio
+3. Navigate and Practice:
+   - Use Previous/Next buttons to browse vocabulary
+   - Click "🔊 Play TTS" or "🐢 Slow TTS" for audio playback
+   - Hold record button to practice pronunciation
+   - Click "🔄 ASR Convert" for detailed feedback
 
-PRONUNCIATION TRAINING MODE:
-1. Enable "Pronunciation Training Mode"
-2. Enter the reference text you want to practice
-3. Click "Play TTS" to hear the correct pronunciation
-4. Record yourself reading the text
-5. Click "ASR Convert" to get feedback
+📚 VOCABULARY MANAGEMENT
+• Load from CSV, TXT, or ZIP archives
+• Automatic AI enhancement for missing definitions/pronunciations
+• Image support with ZIP archive integration
+• Customizable column mapping (1-6 columns)
+• Multiple delimiter support (comma, pipe, tab, semicolon)
 
-FEEDBACK INCLUDES:
-• Overall pronunciation accuracy score
-• Word-by-word analysis
-• Identification of mispronounced words
-• Missing or extra words
-• Personalized recommendations
-• Color-coded results (green/orange/red)
+🔊 PRONUNCIATION TRAINING
+1. Select vocabulary item or enter custom text
+2. Listen to model pronunciation (normal/slow speed)
+3. Record your attempt (hold to record, release to stop)
+4. Get comprehensive feedback including:
+   • Overall accuracy score (percentage)
+   • Word-by-word analysis
+   • Mispronounced words identification
+   • Missing/extra words detection
+   • Personalized improvement recommendations
+   • Color-coded results (🟢Excellent 🟡Good 🔴Needs Practice)
 
-OPTIONS:
-• Show Punctuation (context dependent)
-• Word Timestamps (Whisper only)
-• Adjustable accuracy threshold
+🤖 AI INTEGRATION
+• Automatic content enhancement for incomplete vocabulary
+• Smart definitions and pronunciation guides
+• Fallback to local IPA when AI unavailable
+• Visual status indicators:
+  ⚪ Disconnected | 🟢 Connected | 🔴 Busy/Error | 🟡 Connecting
 
-SAVE OPTIONS:
-• Save transcribed text
-• Save detailed pronunciation report
+🔧 AUDIO FEATURES
+• Multiple speech recognition engines (Google, Vosk, Whisper)
+• Text-to-Speech with normal and slow playback
+• ASR conversion with accuracy scoring
+• Configurable energy threshold and sensitivity
+• Support for WAV and MP3 file formats
 
-SUPPORTED LANGUAGES:
-Greek (default), English, Spanish, French, 
-German, Italian, Portuguese, Russian, 
-Chinese, Japanese, Korean, Arabic
+📋 SUPPORTED LANGUAGES
+Greek (default), English, Spanish, French, German, 
+Italian, Portuguese, Russian, Chinese, Japanese, 
+Korean, Arabic, and more
 
-TIPS FOR BEST RESULTS:
-• Use Whisper engine for better accuracy
-• Speak clearly and at moderate pace
-• Ensure quiet recording environment
-• Practice difficult words individually
-• Hold the record button to start recording, release to stop"""
+💡 TIPS FOR BEST RESULTS
+• Use Whisper engine for highest accuracy
+• Practice in quiet environment
+• Speak clearly at moderate pace
+• Focus on one challenging sound at a time
+• Regular practice yields best improvement
+• Check AI status indicator for optimal performance
+
+📄 SAVE OPTIONS
+• Export transcribed text
+• Save detailed pronunciation reports
+• Preserve practice session data
+
+❓ NEED MORE HELP?
+Refer to HELP.md for comprehensive documentation
+or check the status area for detailed error messages."""
         
         QMessageBox.information(self, "Help", help_text)
     
