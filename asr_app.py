@@ -1358,8 +1358,23 @@ class ASRApp(QMainWindow):
     
     def on_pron_help_finished(self, help_text):
         """Handle completed pronunciation help request"""
-        self.pron_help_text.setPlainText(help_text)
+        # Clean the help text to remove blank lines and extra whitespace
+        cleaned_help_text = self.clean_display_text(help_text)
+        self.pron_help_text.setPlainText(cleaned_help_text)
         self.status_text.append(f"[{self.get_current_time()}] ✅ Pronunciation help loaded")
+    
+    def clean_display_text(self, text):
+        """Clean text for display by removing blank lines and normalizing whitespace"""
+        if not text:
+            return ""
+        
+        # Split into lines, strip each line, and filter out empty lines
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        
+        # Join with single newlines
+        cleaned = '\n'.join(lines)
+        
+        return cleaned.strip()
     
     def on_pron_help_error(self, error_msg):
         """Handle pronunciation help request error"""
@@ -1582,7 +1597,9 @@ class ASRApp(QMainWindow):
         english_pron = entry.get('english_pronunciation', '')
         ipa_pron = entry.get('ipa_pronunciation', '')
 
-        self.definition_text.setPlainText(definition or "No definition available")
+        # Clean definition text to remove blank lines
+        cleaned_definition = self.clean_display_text(definition) if definition else "No definition available"
+        self.definition_text.setPlainText(cleaned_definition)
         
         if english_pron or ipa_pron:
             combined_pron = f"English: {english_pron or 'N/A'}\nIPA:     {ipa_pron or 'N/A'}"
