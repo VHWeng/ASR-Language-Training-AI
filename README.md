@@ -73,8 +73,8 @@ An advanced speech recognition application with pronunciation training capabilit
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd ASR_Language_Training
+git clone https://github.com/VHWeng/ASR-Language-Training-AI
+cd ASR_Language_Training_AI
 ```
 
 2. Create virtual environment:
