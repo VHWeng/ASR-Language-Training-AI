@@ -234,13 +234,6 @@ class ConfigDialog(QDialog):
         self.img_file_col_spin.setRange(1, 20)
         self.img_file_col_spin.setValue(6)
         col_mapping_layout.addWidget(self.img_file_col_spin, 5, 1)
-
-        # Grammar column
-        col_mapping_layout.addWidget(QLabel("Grammar Column:"), 6, 0)
-        self.grammar_col_spin = QSpinBox()
-        self.grammar_col_spin.setRange(1, 20)
-        self.grammar_col_spin.setValue(7)
-        col_mapping_layout.addWidget(self.grammar_col_spin, 6, 1)
         
         vocab_config_layout.addLayout(col_mapping_layout)
         vocab_config_group.setLayout(vocab_config_layout)
@@ -374,8 +367,7 @@ class ConfigDialog(QDialog):
             'english_pronunciation': self.eng_pron_col_spin.value(),
             'ipa_pronunciation': self.ipa_col_spin.value(),
             'image_description': self.img_desc_col_spin.value(),
-            'image_filename': self.img_file_col_spin.value(),
-            'grammar': self.grammar_col_spin.value()
+            'image_filename': self.img_file_col_spin.value()
         }
         
         return config
@@ -701,56 +693,6 @@ class AIPronHelpThread(QThread):
         
         return cleaned.strip()
 
-class AIGrammarThread(QThread):
-    finished = pyqtSignal(str)
-    error = pyqtSignal(str)
-
-    def __init__(self, reference_text, config):
-        super().__init__()
-        self.reference_text = reference_text
-        self.config = config
-
-    def run(self):
-        try:
-            import subprocess
-            
-            # Prompt for grammar
-            grammar_prompt = f"""You are a linguistics expert. For the {self.config['language_name']} phrase or word "{self.reference_text}", provide its grammatical category and a brief explanation (2-3 lines). Be concise."""
-
-            selected_model = self.config.get('ollama_model', 'kimi-k2:1t-cloud')
-
-            grammar_result = subprocess.run([
-                'ollama', 'run', selected_model, grammar_prompt
-            ], capture_output=True, text=True, timeout=45, encoding='utf-8')
-
-            if grammar_result.returncode == 0 and grammar_result.stdout.strip():
-                grammar_text = grammar_result.stdout.strip()
-                # Clean up the response
-                grammar_text = self.clean_ai_response(grammar_text)
-                self.finished.emit(grammar_text)
-            else:
-                self.error.emit("Failed to get grammar from AI")
-
-        except subprocess.TimeoutExpired:
-            self.error.emit("AI request timed out. Please check if Ollama is running and responsive.")
-        except FileNotFoundError:
-            self.error.emit("Ollama is not installed or not in PATH. Please install Ollama first.")
-        except Exception as e:
-            self.error.emit(f"Failed to get grammar: {str(e)}")
-    
-    def clean_ai_response(self, response):
-        """Clean AI response by removing markdown, extra formatting, and noise"""
-        if not response:
-            return ""
-        
-        # Remove common markdown artifacts
-        cleaned = response.strip()
-        cleaned = cleaned.replace("```", "")  # Remove code blocks
-        cleaned = cleaned.replace("**", "")   # Remove bold markers
-        cleaned = cleaned.replace("*", "")    # Remove italic markers
-        
-        return cleaned.strip()
-
 class ASRApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -772,8 +714,7 @@ class ASRApp(QMainWindow):
                 'english_pronunciation': 3,
                 'ipa_pronunciation': 4,
                 'image_description': 5,
-                'image_filename': 6,
-                'grammar': 7
+                'image_filename': 6
             }
         }
         self.pronunciation_data = None
@@ -842,15 +783,10 @@ class ASRApp(QMainWindow):
         self.show_pron_help_cb.setChecked(False)
         self.show_pron_help_cb.toggled.connect(self.toggle_pron_help_display)
         
-        self.show_grammar_cb = QCheckBox("Show Grammar")
-        self.show_grammar_cb.setChecked(False) # Set to False as requested
-        self.show_grammar_cb.toggled.connect(self.toggle_grammar_display)
-        
         mode_layout.addWidget(self.training_mode_cb)
         mode_layout.addWidget(self.show_pronunciation_cb)
         mode_layout.addWidget(self.show_definition_cb)
         mode_layout.addWidget(self.show_pron_help_cb)
-        mode_layout.addWidget(self.show_grammar_cb) # Add this line back
         
         # Add AI status indicator
         self.ai_status_indicator = QLabel("⚪ AI Disconnected")
@@ -1002,17 +938,6 @@ class ASRApp(QMainWindow):
         
         # Add pronunciation help text box
         pron_layout.addWidget(self.pron_help_text)
-
-        # Grammar text box (optional, 2-line scrollable)
-        self.grammar_text = QTextEdit()
-        self.grammar_text.setMaximumHeight(60)  # Approximately 2 lines
-        self.grammar_text.setPlaceholderText("Grammar information from Ollama AI will appear here when enabled...")
-        self.grammar_text.setReadOnly(True)
-        self.grammar_text.setFont(QFont("Arial", 12))
-        self.grammar_text.setStyleSheet("QTextEdit { font-family: Arial; font-size: 12pt; }")
-        self.grammar_text.hide()  # Hidden by default
-        
-        pron_layout.addWidget(self.grammar_text)
         
         # Add navigation buttons layout here
         pron_layout.addLayout(nav_layout)
@@ -1266,15 +1191,6 @@ class ASRApp(QMainWindow):
             QTimer.singleShot(100, deferred_show)
         else:
             self.pron_help_text.hide()
-            
-    def toggle_grammar_display(self, enabled):
-        """Toggle grammar text box visibility"""
-        if enabled:
-            self.grammar_text.show()
-            if self.reference_text.text().strip():
-                self.load_grammar_ai() # New method to be implemented
-        else:
-            self.grammar_text.hide()
     
     def update_ai_status(self, status, color="gray"):
         """Update AI status indicator"""
@@ -1357,22 +1273,6 @@ class ASRApp(QMainWindow):
         self.pron_help_thread.finished.connect(self.on_pron_help_finished)
         self.pron_help_thread.error.connect(self.on_pron_help_error)
         self.pron_help_thread.start()
-
-    def load_grammar_ai(self):
-        """Load grammar from AI when grammar is enabled"""
-        reference_text = self.reference_text.text().strip()
-        if not reference_text:
-            return
-
-        if not self.show_grammar_cb.isChecked():
-            return
-
-        self.status_text.append(f"[{self.get_current_time()}] 📚 Requesting grammar for: '{reference_text}'")
-        
-        self.grammar_thread = AIGrammarThread(reference_text, self.config)
-        self.grammar_thread.finished.connect(self.on_grammar_finished)
-        self.grammar_thread.error.connect(self.on_grammar_error)
-        self.grammar_thread.start()
 
     def on_ai_data_finished(self, results):
         pron_result = results['pron_result']
@@ -1480,17 +1380,6 @@ class ASRApp(QMainWindow):
         """Handle pronunciation help request error"""
         self.pron_help_text.setPlainText(f"Failed to get pronunciation help: {error_msg}")
         self.status_text.append(f"[{self.get_current_time()}] ❌ Pronunciation help error: {error_msg}")
-    
-    def on_grammar_finished(self, grammar_text):
-        """Handle completed grammar request"""
-        cleaned_grammar_text = self.clean_display_text(grammar_text)
-        self.grammar_text.setPlainText(cleaned_grammar_text)
-        self.status_text.append(f"[{self.get_current_time()}] ✅ Grammar loaded")
-    
-    def on_grammar_error(self, error_msg):
-        """Handle grammar request error"""
-        self.grammar_text.setPlainText(f"Failed to get grammar: {error_msg}")
-        self.status_text.append(f"[{self.get_current_time()}] ❌ Grammar error: {error_msg}")
     
     def load_vocabulary_file(self):
         """Load vocabulary from text, CSV, or ZIP file"""
@@ -1608,8 +1497,8 @@ class ASRApp(QMainWindow):
                     if columns['image_filename'] <= len(row):
                         vocab_entry['image_filename'] = row[columns['image_filename'] - 1].strip()
                     
-                    if columns['grammar'] <= len(row):
-                        vocab_entry['grammar'] = row[columns['grammar'] - 1].strip()
+                    if columns['ipa_pronunciation'] <= len(row):
+                        vocab_entry['ipa_pronunciation'] = row[columns['ipa_pronunciation'] - 1].strip()
                     
                     # Only add entries that have reference text
                     if vocab_entry['reference']:
@@ -1707,9 +1596,6 @@ class ASRApp(QMainWindow):
         definition = entry.get('definition', '')
         english_pron = entry.get('english_pronunciation', '')
         ipa_pron = entry.get('ipa_pronunciation', '')
-        grammar = entry.get('grammar', '') # Extract grammar here
-
-        grammar = entry.get('grammar', '')
 
         # Clean definition text to remove blank lines
         cleaned_definition = self.clean_display_text(definition) if definition else "No definition available"
@@ -1721,6 +1607,10 @@ class ASRApp(QMainWindow):
         else:
             self.pronunciation_text.setPlainText("No pronunciation available")
 
+        # Clear pronunciation help text when displaying new entry
+        # This ensures it gets refreshed when needed
+        self.pron_help_text.clear()
+        
         # Show pronunciation help text box if checkbox is enabled
         if self.show_pron_help_cb.isChecked():
             # Defer visibility setting to ensure proper initialization
@@ -1733,14 +1623,6 @@ class ASRApp(QMainWindow):
         # If pronunciation help is enabled, load it for the new entry
         if self.show_pron_help_cb.isChecked():
             self.load_pron_help_ai()
-        
-        # Handle grammar display and AI loading
-        if self.show_grammar_cb.isChecked():
-            self.grammar_text.show()
-            if grammar: # Grammar available from file
-                self.grammar_text.setPlainText(self.clean_display_text(grammar))
-            else: # Grammar missing from file, try AI
-                self.load_grammar_ai()
 
         # Handle image
         if self.enable_image_cb.isChecked() and entry.get('image_filename', ''):
@@ -2547,8 +2429,7 @@ Perfect for language learners!"""
                 text_boxes = [
                     self.pronunciation_text,
                     self.definition_text, 
-                    self.pron_help_text,
-                    self.grammar_text
+                    self.pron_help_text
                 ]
                 
                 # Get current font size from pronunciation text (as reference)
@@ -2595,10 +2476,6 @@ Perfect for language learners!"""
             index = dialog.ollama_model_combo.findText(self.config['ollama_model'])
             if index >= 0:
                 dialog.ollama_model_combo.setCurrentIndex(index)
-
-        # Set grammar column if it exists in config
-        if 'vocab_columns' in self.config and 'grammar' in self.config['vocab_columns']:
-            dialog.grammar_col_spin.setValue(self.config['vocab_columns']['grammar'])
         
         if dialog.exec_() == QDialog.Accepted:
             self.config = dialog.get_config()
