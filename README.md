@@ -9,14 +9,16 @@ An advanced speech recognition application with pronunciation training capabilit
 - **Pronunciation Training**: Interactive pronunciation practice with AI-powered feedback
 - **Vocabulary Management**: Load and navigate through vocabulary sets from CSV/ZIP files
 - **Image Support**: Display images associated with vocabulary entries
-- **AI Integration**: Ollama-powered definition and pronunciation generation
+- **AI Integration**: Ollama-powered definition, pronunciation, and grammar generation
 
 ### 📚 Vocabulary System
 - Load vocabulary from CSV, TXT, or ZIP files
 - Support for custom column mappings and delimiters
 - Navigation between vocabulary entries (Previous/Next buttons)
-- **Automatic AI enhancement for missing definitions/pronunciations**
+- **Automatic AI enhancement for missing definitions/pronunciations/grammar**
+- **Grammar Information Display**: Show detailed grammar information for vocabulary items
 - **Smart fallback to local IPA conversion when AI unavailable**
+- **Grammar Information**: Display grammar details with AI-powered analysis
 - Image loading from ZIP archives with "images" subdirectory support
 
 ### 🔊 Audio Features
@@ -39,14 +41,16 @@ An advanced speech recognition application with pronunciation training capabilit
 - **Pronunciation Training**: Interactive pronunciation practice with AI-powered feedback
 - **Vocabulary Management**: Load and navigate through vocabulary sets from CSV/ZIP files
 - **Image Support**: Display images associated with vocabulary entries
-- **AI Integration**: Ollama-powered definition and pronunciation generation
+- **AI Integration**: Ollama-powered definition, pronunciation, and grammar generation
 
 ### 📚 Vocabulary System
 - Load vocabulary from CSV, TXT, or ZIP files
 - Support for custom column mappings and delimiters
 - Navigation between vocabulary entries (Previous/Next buttons)
-- **Automatic AI enhancement for missing definitions/pronunciations**
+- **Automatic AI enhancement for missing definitions/pronunciations/grammar**
+- **Grammar Information Display**: Show detailed grammar information for vocabulary items
 - **Smart fallback to local IPA conversion when AI unavailable**
+- **Grammar Information**: Display grammar details with AI-powered analysis
 - Image loading from ZIP archives with "images" subdirectory support
 
 ### 🔊 Audio Features
@@ -159,6 +163,10 @@ python asr_app.py
 - Automatic generation of definitions and pronunciations
 - Fallback to local IPA conversion when AI is unavailable
 - Real-time status indicators showing AI connection state
+- **Grammar Information**: Display grammar details with AI-powered analysis
+- **Show Grammar Feature**: New checkbox to display detailed grammar information
+- **AI-Powered Grammar Analysis**: Ollama generates grammar details when not available in files
+- **Configurable Grammar Column**: Support for grammar data in column 7 of vocabulary files
 
 #### Customization Options
 - Map vocabulary columns to match your file structure
@@ -180,16 +188,16 @@ Column 2: Definition/Translation
 Column 3: English Pronunciation
 Column 4: IPA Pronunciation
 Column 5: Image Description
-Column 6: Image Filename
+Column 6: Image Filename\nColumn 7: Grammar Information
 ```
 
 ### Example CSV Format
 ```csv
-Word|Definition|English Pron|IPA Pron|Image Desc|Image File
-hello|A greeting|heh-low|həˈloʊ|Waving hand|hello.png
-world|The earth|wurld|wɜrld|Planet Earth|world.png
-αὐτός|he, she, it|af-toss|ˈav.tos|Person pointing|person.png
-βλέπω|I see|vleh-po|ˈvle.po|Eye seeing|eye.png
+Word|Definition|English Pron|IPA Pron|Image Desc|Image File|Grammar
+hello|A greeting|heh-low|həˈloʊ|Waving hand|hello.png|Noun: common greeting word
+world|The earth|wurld|wɜrld|Planet Earth|world.png|Noun: planet earth
+αὐτός|he, she, it|af-toss|ˈav.tos|Person pointing|person.png|Pronoun: reflexive pronoun
+βλέπω|I see|vleh-po|ˈvle.po|Eye seeing|eye.png|Verb: to see, present tense
 ```
 
 ### ZIP Archive Structure
@@ -210,8 +218,9 @@ Customize which columns contain what data:
 - Reference Text Column
 - Definition Column  
 - English Pronunciation Column
-- Image Filename Column (Column 6)
 - Image Description Column (Column 5)
+- Image Filename Column (Column 6)
+- Grammar Information Column (Column 7)
 
 ### Delimiters
 Supported delimiters:
@@ -291,7 +300,7 @@ git status
 
 ```
 ASR_Language_Training/
-├── asr_app.py                      # Main application
+├── asr_app.py                      # Main application with pronunciation training and grammar support
 ├── requirements.txt                # Python dependencies
 ├── README.md                       # Primary documentation
 ├── HELP.md                         # User guide and help
