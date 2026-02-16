@@ -48,7 +48,7 @@ The application supports multiple speech recognition engines:
 - **Playback Controls**: Normal and slow-speed TTS
 - **ASR Conversion**: Transcribe recorded audio with accuracy scoring
 
-### Navigation
+- **Show Grammar**: Display detailed grammar information for vocabulary items\n\n### Navigation
 - **Previous/Next Buttons**: Move between vocabulary items
 - **Progress Indicator**: Shows current position
 - **Quick Jump**: Direct navigation to specific entries
@@ -75,14 +75,15 @@ Column 3: English Pronunciation
 Column 4: IPA Pronunciation
 Column 5: Image Description
 Column 6: Image Filename
+Column 7: Grammar Information
 ```
 
 ### Example Vocabulary File
 ```csv
-Word|Definition|English Pron|IPA Pron|Image Desc|Image File
-hello|A greeting|heh-low|həˈloʊ|Waving hand|hello.png
-αὐτός|he, she, it|af-toss|ˈav.tos|Person pointing|person.png
-βλέπω|I see|vleh-po|ˈvle.po|Eye seeing|eye.png
+Word|Definition|English Pron|IPA Pron|Image Desc|Image File|Grammar
+hello|A greeting|heh-low|həˈloʊ|Waving hand|hello.png|Noun: common greeting word
+αὐτός|he, she, it|af-toss|ˈav.tos|Person pointing|person.png|Pronoun: reflexive pronoun
+βλέπω|I see|vleh-po|ˈvle.po|Eye seeing|eye.png|Verb: to see, present tense
 ```
 
 ### Loading Vocabulary
@@ -153,9 +154,10 @@ hello|A greeting|heh-low|həˈloʊ|Waving hand|hello.png
    - Select your preferred model
 
 ### AI Features
-- **Automatic Enhancement**: Fills missing definitions and pronunciations
+- **Automatic Enhancement**: Fills missing definitions, pronunciations, and grammar information
 - **Smart Definitions**: Context-aware, clear explanations
 - **Pronunciation Guides**: Both English approximations and IPA notation
+- **Grammar Information**: Detailed grammatical analysis and information
 - **Graceful Fallback**: Local IPA conversion when AI unavailable
 
 ### AI Status Indicators
